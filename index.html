@@ -1551,21 +1551,6 @@ function downloadConfiguredHTML(){
   URL.revokeObjectURL(a.href);
   toast('📥 다운로드 완료! GitHub에 업로드하면 모든 기기에서 설정이 유지됩니다');
 }
-  let html=document.documentElement.outerHTML;
-  html=html.replace("let SB_PRESET_URL = 'https://uelfcuvmlopurfebjowp.supabase.co';  // 예: 'https://abcd1234.supabase.co'",
-    "let SB_PRESET_URL = '"+url+"';  // 예: 'https://abcd1234.supabase.co'");
-  html=html.replace("let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'
-let SB_PRESET_LABELS = null;   // 저장 파일 다운로드 시 자동 설정됨
-let SB_PRESET_WIP_MAX = null;  // 저장 파일 다운로드 시 자동 설정됨",
-    "let SB_PRESET_KEY = '"+key+"';  // 예: 'eyJhbGci...'");
-  const blob=new Blob([html],{type:'text/html'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='index.html';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast('📥 다운로드 완료! 이 파일을 GitHub에 올리면 모든 기기에서 자동 연결됩니다');
-}
 
 function disconnectSupabase(){
   if(!confirm('Supabase 연결을 해제하시겠습니까?\n데이터는 로컬에 유지됩니다.'))return;

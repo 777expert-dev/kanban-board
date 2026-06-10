@@ -503,7 +503,16 @@ create policy "public_all" on tasks      for all using (true) with check (true);
 create policy "public_all" on checklists for all using (true) with check (true);
 alter publication supabase_realtime add table tasks;
 alter publication supabase_realtime add table members;
-alter publication supabase_realtime add table checklists;`;
+alter publication supabase_realtime add table checklists;
+-- 설정 저장 테이블 (카드 관리 동기화용)
+create table if not exists settings (
+  key text primary key,
+  value text not null,
+  updated_at timestamptz default now()
+);
+alter table settings enable row level security;
+create policy if not exists "Allow all settings" on settings for all using (true);
+`;
 
 // ══════════════════════════════════════════════
 // SUPABASE
@@ -515,6 +524,8 @@ let syncLock = false;
 // 아래 두 줄에 직접 입력하면 모든 기기에서 자동 연결 (localStorage 불필요)
 let SB_PRESET_URL = 'https://uelfcuvmlopurfebjowp.supabase.co';  // 예: 'https://abcd1234.supabase.co'
 let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'
+let SB_PRESET_LABELS = null;   // 저장 파일 다운로드 시 자동 설정됨
+let SB_PRESET_WIP_MAX = null;  // 저장 파일 다운로드 시 자동 설정됨
 // ─────────────────────────────────────────────────────────────────
 
 async function initSupabase() {
@@ -560,6 +571,9 @@ function subscribeRealtime() {
     .on('postgres_changes',{event:'*',schema:'public',table:'checklists'}, async()=>{
       if(syncLock) return;
       await loadFromSupabase(); renderAll();
+    })
+    .on('postgres_changes',{event:'*',schema:'public',table:'settings'}, async()=>{
+      await _pullSettings(); renderAll();
     })
     .subscribe();
 }
@@ -608,12 +622,13 @@ async function deleteMemberSB(id) {
 
 async function loadFromSupabase() {
   if(!sb) return;
+  await _pullSettings();
   const {data:md}=await sb.from('members').select('*').order('sort_order');
   const {data:td}=await sb.from('tasks').select('*').order('created_at');
   const {data:cd}=await sb.from('checklists').select('*').order('sort_order');
   if(md&&md.length>0) MEMBERS=md;
   if(td) tasks=td.map(t=>({
-    id:t.id,title:t.title,assignee:t.assignee||'',label:t.label||'ops',due:t.due||'',
+    id:t.id,title:t.title,assignee:t.assignee||'',label:t.label||Object.keys(LABELS)[0],due:t.due||'',
     status:t.status||'backlog',blocker:t.blocker||'',blockedAt:t.blocked_at||'',
     note:t.note||'',doneDate:t.done_date||'',
     checklist:(cd||[]).filter(c=>c.task_id===t.id).map(c=>({id:c.id,text:c.text,done:c.done}))
@@ -631,6 +646,7 @@ async function pushAllToSupabase() {
       await sb.from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
       if(t.checklist.length>0) await sb.from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
     }
+    await _pushSettings();
     toast('✅ Supabase 동기화 완료');
   } catch(e){ toast('동기화 오류: '+e.message,'err'); }
   finally { setTimeout(()=>syncLock=false,800); }
@@ -772,14 +788,44 @@ function saveCardSettings(){
     localStorage.setItem('kb_labels',JSON.stringify(LABELS));
     localStorage.setItem('kb_wip_max',String(WIP_MAX));
   }catch(e){}
+  SB_PRESET_LABELS=JSON.parse(JSON.stringify(LABELS));
+  SB_PRESET_WIP_MAX=WIP_MAX;
+  _pushSettings();
+}
+
+async function _pushSettings(){
+  if(!sb||sbStatus!=='connected') return;
+  try{
+    await sb.from('settings').upsert([
+      {key:'labels', value:JSON.stringify(LABELS), updated_at:new Date().toISOString()},
+      {key:'wip_max', value:String(WIP_MAX), updated_at:new Date().toISOString()},
+    ]);
+  }catch(e){}
+}
+
+async function _pullSettings(){
+  if(!sb||sbStatus!=='connected') return;
+  try{
+    const {data}=await sb.from('settings').select('*');
+    if(!data) return;
+    let changed=false;
+    for(const row of data){
+      if(row.key==='labels'){try{LABELS=JSON.parse(row.value);SB_PRESET_LABELS=LABELS;changed=true;}catch(e){}}
+      if(row.key==='wip_max'){const v=parseInt(row.value);if(!isNaN(v)){WIP_MAX=v;SB_PRESET_WIP_MAX=v;changed=true;}}
+    }
+    if(changed){
+      try{localStorage.setItem('kb_labels',JSON.stringify(LABELS));localStorage.setItem('kb_wip_max',String(WIP_MAX));}catch(e){}
+      updateLabelStyles();
+    }
+  }catch(e){}  // settings table may not exist yet
 }
 
 function loadCardSettings(){
   try{
-    const ls=localStorage.getItem('kb_labels');
-    if(ls) LABELS=JSON.parse(ls);
-    const wm=localStorage.getItem('kb_wip_max');
-    if(wm) WIP_MAX=parseInt(wm)||3;
+    if(SB_PRESET_LABELS) LABELS=JSON.parse(JSON.stringify(SB_PRESET_LABELS));
+    else { const ls=localStorage.getItem('kb_labels'); if(ls) LABELS=JSON.parse(ls); }
+    if(SB_PRESET_WIP_MAX!=null) WIP_MAX=SB_PRESET_WIP_MAX;
+    else { const wm=localStorage.getItem('kb_wip_max'); if(wm) WIP_MAX=parseInt(wm)||3; }
   }catch(e){}
   updateLabelStyles();
 }
@@ -1496,9 +1542,21 @@ function downloadConfiguredHTML(){
   const key=SB_PRESET_KEY||localStorage.getItem('sb_key')||'';
   if(!url||!key){toast('먼저 저장 & 연결을 완료해주세요','warn');return;}
   let html=document.documentElement.outerHTML;
+  html=html.replace(/let SB_PRESET_URL = '[^']*';/g,'let SB_PRESET_URL = \''+url+'\';');
+  html=html.replace(/let SB_PRESET_KEY = '[^']*';/g,'let SB_PRESET_KEY = \''+key+'\';');
+  html=html.replace('let SB_PRESET_LABELS = null;','let SB_PRESET_LABELS = '+JSON.stringify(LABELS)+';');
+  html=html.replace('let SB_PRESET_WIP_MAX = null;','let SB_PRESET_WIP_MAX = '+WIP_MAX+';');
+  const blob=new Blob([html],{type:'text/html'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='index.html';a.click();
+  URL.revokeObjectURL(a.href);
+  toast('📥 다운로드 완료! GitHub에 업로드하면 모든 기기에서 설정이 유지됩니다');
+}
+  let html=document.documentElement.outerHTML;
   html=html.replace("let SB_PRESET_URL = 'https://uelfcuvmlopurfebjowp.supabase.co';  // 예: 'https://abcd1234.supabase.co'",
     "let SB_PRESET_URL = '"+url+"';  // 예: 'https://abcd1234.supabase.co'");
-  html=html.replace("let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'",
+  html=html.replace("let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'
+let SB_PRESET_LABELS = null;   // 저장 파일 다운로드 시 자동 설정됨
+let SB_PRESET_WIP_MAX = null;  // 저장 파일 다운로드 시 자동 설정됨",
     "let SB_PRESET_KEY = '"+key+"';  // 예: 'eyJhbGci...'");
   const blob=new Blob([html],{type:'text/html'});
   const a=document.createElement('a');

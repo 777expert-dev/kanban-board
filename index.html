@@ -346,10 +346,15 @@ alter publication supabase_realtime add table checklists;`;
 let sb = null;
 let sbStatus = 'disconnected'; // connected | offline | disconnected
 let syncLock = false;
+// ── Supabase 영구 설정 ────────────────────────────────────────────
+// 아래 두 줄에 직접 입력하면 모든 기기에서 자동 연결 (localStorage 불필요)
+let SB_PRESET_URL = '';  // 예: 'https://abcd1234.supabase.co'
+let SB_PRESET_KEY = '';  // 예: 'eyJhbGci...'
+// ─────────────────────────────────────────────────────────────────
 
 async function initSupabase() {
-  const url = localStorage.getItem('sb_url');
-  const key = localStorage.getItem('sb_key');
+  const url = SB_PRESET_URL || localStorage.getItem('sb_url');
+  const key = SB_PRESET_KEY || localStorage.getItem('sb_key');
   if (!url || !key) { sbStatus='disconnected'; updateConnBadge(); return false; }
   try {
     sb = window.supabase.createClient(url, key);
@@ -1038,7 +1043,12 @@ function openSettingsModal(){
       <button class="btn btn-o" onclick="testSupabaseConn()">🔌 연결 테스트</button>
       ${sbStatus==='connected'?`<button class="btn btn-o" onclick="pushAllToSupabase()">⬆️ 전체 동기화</button>`:''}
       ${savedUrl?`<button class="btn btn-ghost" onclick="disconnectSupabase()">연결 해제</button>`:''}
+      ${(savedUrl||SB_PRESET_URL)?`<button class="btn btn-o" onclick="downloadConfiguredHTML()" style="background:#059669;color:#fff;border-color:#059669">📥 설정 저장 파일 다운로드</button>`:''}
     </div>
+    ${(savedUrl||SB_PRESET_URL)?`<div style="padding:8px 0;font-size:11.5px;color:#059669;line-height:1.6">
+      ✅ <b>영구 저장 방법</b>: 위 버튼으로 파일 다운로드 → GitHub에 업로드 → Vercel 자동 재배포<br>
+      그러면 모든 기기·브라우저에서 자동으로 Supabase에 연결됩니다.
+    </div>`:''}
 
     <details>
       <summary>📄 Supabase 테이블 생성 SQL</summary>
@@ -1101,11 +1111,30 @@ async function testSupabaseConn(){
 async function saveSupabaseConfig(){
   const url=$('sb-url')?.value.trim(),key=$('sb-key')?.value.trim();
   if(!url||!key){toast('URL과 Key를 모두 입력하세요','warn');return;}
-  localStorage.setItem('sb_url',url);localStorage.setItem('sb_key',key);
+  try{localStorage.setItem('sb_url',url);localStorage.setItem('sb_key',key);}catch(e){}
+  SB_PRESET_URL=url; SB_PRESET_KEY=key;
   closeModal();
   toast('연결 중...');
   const ok=await initSupabase();
-  if(ok){await loadFromSupabase();renderAll();toast('✅ Supabase 연결 완료!');}
+  if(ok){await loadFromSupabase();renderAll();toast('✅ Supabase 연결 완료! 📥 설정 포함 파일을 다운로드해 GitHub에 올리세요');}
+}
+
+function downloadConfiguredHTML(){
+  const url=SB_PRESET_URL||localStorage.getItem('sb_url')||'';
+  const key=SB_PRESET_KEY||localStorage.getItem('sb_key')||'';
+  if(!url||!key){toast('먼저 저장 & 연결을 완료해주세요','warn');return;}
+  let html=document.documentElement.outerHTML;
+  html=html.replace("let SB_PRESET_URL = '';  // 예: 'https://abcd1234.supabase.co'",
+    "let SB_PRESET_URL = '"+url+"';  // 예: 'https://abcd1234.supabase.co'");
+  html=html.replace("let SB_PRESET_KEY = '';  // 예: 'eyJhbGci...'",
+    "let SB_PRESET_KEY = '"+key+"';  // 예: 'eyJhbGci...'");
+  const blob=new Blob([html],{type:'text/html'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='index.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('📥 다운로드 완료! 이 파일을 GitHub에 올리면 모든 기기에서 자동 연결됩니다');
 }
 
 function disconnectSupabase(){

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>인사총무팀 칸반 보드</title>
+<title>인사총무팀 업무 칸반 보드</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -362,21 +362,26 @@ details summary:hover{color:#2563EB}
   .tb-btn { padding: 5px 9px; font-size: 11px; }
   .modal { width: 520px; }
 }
+
+/* ── ADMIN MODAL TABS ── */
+.adm-tabs{display:flex;gap:4px;margin-bottom:16px;background:#F1F5F9;border-radius:8px;padding:4px}
+.adm-tab{flex:1;padding:7px 10px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748B;background:transparent;transition:all .15s;white-space:nowrap}
+.adm-tab.active{background:#fff;color:#1F3864;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.adm-tab:hover:not(.active){background:rgba(255,255,255,.6)}
+.adm-pane{display:none}.adm-pane.active{display:block}
 </style>
 </head>
 <body>
 
 <!-- TOPBAR -->
 <div id="topbar">
-  <div class="tb-brand">📌 인사총무팀 칸반 보드 <small id="tb-date"></small></div>
+  <div class="tb-brand">📌 인사총무팀 업무 칸반 보드 <small id="tb-date"></small></div>
   <div id="wip-row"></div>
   <div class="tb-r">
     <div id="conn-badge" class="cb-disconnected" onclick="openSettingsModal()">🔴 로컬</div>
     <div id="filter-row"></div>
     <button class="tb-btn" onclick="openGuideModal()">📖 칸반 안내</button>
-    <button class="tb-btn" onclick="openMembersModal()">👥 팀원 관리</button>
-    <button class="tb-btn" onclick="openSettingsModal()">⚙️ 연동 설정</button>
-    <button class="tb-btn" onclick="openCardMgmtModal()">🏷️ 카드 관리</button>
+    <button class="tb-btn" onclick="openAdminModal('member')">🔧 관리자</button>
     <button class="tb-btn btn-add-main" onclick="addCardModal(null)">+ 카드 추가</button>
   </div>
 </div>
@@ -715,18 +720,29 @@ function av(name,size=22){
   const fs=Math.round(size*.38)+'px';
   return `<div class="av" style="width:${size}px;height:${size}px;font-size:${fs};background:${m.color}" title="${m.name}">${name?name.slice(-2):''}</div>`;
 }
+function parseDue(due){
+  if(!due)return null;
+  if(due.includes('-')){return new Date(due+'T00:00:00');}
+  const[mo,d]=due.split('/').map(Number);
+  return new Date(new Date().getFullYear(),mo-1,d);
+}
+function fmtDueDisp(due){
+  if(!due)return '';
+  if(due.includes('-')){const[,m,d]=due.split('-');return m+'/'+d;}
+  return due;
+}
 function daysLeft(due){
   if(!due)return 999;
-  const[mo,d]=due.split('/').map(Number);
+  const dt=parseDue(due);if(!dt)return 999;
   const now=new Date();now.setHours(0,0,0,0);
-  return Math.ceil((new Date(2026,mo-1,d)-now)/86400000);
+  return Math.ceil((dt-now)/86400000);
 }
 function dueClass(due){const dl=daysLeft(due);return dl<0?'due-over':dl<=2?'due-urgent':dl<=5?'due-soon':'due-ok';}
-function dueText(due){const dl=daysLeft(due);return dl<0?`~${due} D+${-dl}초과`:dl===0?`~${due} D-Day!`:`~${due} D-${dl}`;}
+function dueText(due){const dl=daysLeft(due);const dp=fmtDueDisp(due);return dl<0?`~${dp} D+${-dl}초과`:dl===0?`~${dp} D-Day!`:`~${dp} D-${dl}`;}
 function clDone(t){return t.checklist.filter(c=>c.done).length;}
 function clPct(t){return t.checklist.length?Math.round(clDone(t)/t.checklist.length*100):0;}
 function blockedDays(t){if(!t.blockedAt)return 0;return Math.floor((Date.now()-new Date(t.blockedAt))/86400000);}
-function isThisWeek(ds){if(!ds)return false;const[m,d]=ds.split('/').map(Number);const dt=new Date(2026,m-1,d);const now=new Date();const s=new Date(now);s.setDate(now.getDate()-now.getDay());const e=new Date(s);e.setDate(s.getDate()+6);return dt>=s&&dt<=e;}
+function isThisWeek(ds){if(!ds)return false;const dt=parseDue(ds);if(!dt)return false;const now=new Date();const s=new Date(now);s.setDate(now.getDate()-now.getDay());const e=new Date(s);e.setDate(s.getDate()+6);return dt>=s&&dt<=e;}
 function getFiltered(status){
   let a=tasks.filter(t=>t.status===status);
   if(filterMember!=='all')a=a.filter(t=>t.assignee===filterMember);
@@ -1151,6 +1167,11 @@ function updateNote(tid){const t=tasks.find(x=>x.id===tid);const el=$('modal-not
 // ADD / EDIT CARD
 // ══════════════════════════════════════════════
 function addCardModal(defaultStatus){
+  const today=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const todayStr=`${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+  const nextWeek=new Date(today);nextWeek.setDate(today.getDate()+7);
+  const nextWeekStr=`${nextWeek.getFullYear()}-${pad(nextWeek.getMonth()+1)}-${pad(nextWeek.getDate())}`;
   showModal('새 카드 추가',`
     <div class="fr"><label>업무명 *</label><input id="nc-title" placeholder="명사+동사 형태 (예: 상반기 인사평가 가이드라인 배포)"></div>
     <div class="fr-row">
@@ -1158,9 +1179,10 @@ function addCardModal(defaultStatus){
       <div class="fr"><label>분류 태그</label><select id="nc-label">${Object.entries(LABELS).map(([k,v])=>`<option value="${k}">${v.ico} ${v.name}</option>`).join('')}</select></div>
     </div>
     <div class="fr-row">
-      <div class="fr"><label>마감일 (MM/DD)</label><input id="nc-due" placeholder="예: 06/30"></div>
-      <div class="fr"><label>단계</label><select id="nc-status">${COLS.map(c=>`<option value="${c.key}" ${c.key===(defaultStatus||'backlog')?'selected':''}>${c.icon} ${c.name}</option>`).join('')}</select></div>
+      <div class="fr"><label>시작일</label><input type="date" id="nc-start" value="${todayStr}"></div>
+      <div class="fr"><label>마감일</label><input type="date" id="nc-due" value="${nextWeekStr}"></div>
     </div>
+    <div class="fr"><label>단계</label><select id="nc-status">${COLS.map(c=>`<option value="${c.key}" ${c.key===(defaultStatus||'backlog')?'selected':''}>${c.icon} ${c.name}</option>`).join('')}</select></div>
     <div class="fr"><label>완료 기준 (Done 이동 조건)</label><input id="nc-note" placeholder="예: 최종 결재 완료 후 담당자 공지 발송"></div>
     <div class="fr"><label>체크리스트 (쉼표로 구분)</label><input id="nc-cl" placeholder="예: 자료 수집, 초안 작성, 결재 상신"></div>`,
     `<div></div><div style="display:flex;gap:7px"><button class="btn btn-o" onclick="closeModal()">취소</button><button class="btn btn-p" onclick="saveNewCard()">카드 생성</button></div>`);
@@ -1168,7 +1190,7 @@ function addCardModal(defaultStatus){
 }
 
 async function saveNewCard(){
-  const title=$('nc-title').value.trim(),due=$('nc-due').value.trim();
+  const title=$('nc-title').value.trim();
   if(!title){toast('업무명을 입력하세요','err');return;}
   const status=$('nc-status').value,who=$('nc-who').value;
   if(status==='prog'&&who){
@@ -1177,7 +1199,7 @@ async function saveNewCard(){
   }
   const clRaw=$('nc-cl').value.trim();
   const checklist=clRaw?clRaw.split(',').map(s=>({id:uuid(),text:s.trim(),done:false})).filter(c=>c.text):[];
-  const t={id:uuid(),title,assignee:who,label:$('nc-label').value,due:due||'12/31',status,checklist,blocker:'',blockedAt:'',note:$('nc-note').value,doneDate:''};
+  const t={id:uuid(),title,assignee:who,label:$('nc-label').value,startDate:$('nc-start').value||'',due:$('nc-due').value||'',status,checklist,blocker:'',blockedAt:'',note:$('nc-note').value,doneDate:''};
   tasks.push(t);
   closeModal();
   await pushTask(t);
@@ -1194,9 +1216,10 @@ function editCardModal(id){
       <div class="fr"><label>분류 태그</label><select id="ec-label">${Object.entries(LABELS).map(([k,v])=>`<option value="${k}" ${k===t.label?'selected':''}>${v.ico} ${v.name}</option>`).join('')}</select></div>
     </div>
     <div class="fr-row">
-      <div class="fr"><label>마감일 (MM/DD)</label><input id="ec-due" value="${t.due}"></div>
-      <div class="fr"><label>단계</label><select id="ec-status">${COLS.map(c=>`<option value="${c.key}" ${c.key===t.status?'selected':''}>${c.icon} ${c.name}</option>`).join('')}</select></div>
+      <div class="fr"><label>시작일</label><input type="date" id="ec-start" value="${t.startDate||''}"></div>
+      <div class="fr"><label>마감일</label><input type="date" id="ec-due" value="${t.due&&t.due.includes('-')?t.due:''}"></div>
     </div>
+    <div class="fr"><label>단계</label><select id="ec-status">${COLS.map(c=>`<option value="${c.key}" ${c.key===t.status?'selected':''}>${c.icon} ${c.name}</option>`).join('')}</select></div>
     <div class="fr"><label>메모 / 완료 기준</label><textarea id="ec-note">${t.note||''}</textarea></div>`,
     `<button class="btn btn-r btn-sm" onclick="deleteCard('${id}')">🗑 삭제</button>
      <div style="display:flex;gap:7px"><button class="btn btn-o" onclick="closeModal()">취소</button><button class="btn btn-p" onclick="saveEdit('${id}')">저장</button></div>`);
@@ -1205,7 +1228,8 @@ function editCardModal(id){
 async function saveEdit(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;
   t.title=$('ec-title').value.trim()||t.title;t.assignee=$('ec-who').value;
-  t.label=$('ec-label').value;t.due=$('ec-due').value.trim()||t.due;
+  t.label=$('ec-label').value;t.due=$('ec-due').value||t.due;
+  t.startDate=$('ec-start').value||t.startDate||'';
   t.status=$('ec-status').value;t.note=$('ec-note').value;
   closeModal();await pushTask(t);renderAll();toast('✅ 수정 완료');
 }
@@ -1216,6 +1240,140 @@ async function deleteCard(id){
   closeModal();await deleteTaskSB(id);renderAll();toast('삭제됨');
 }
 
+
+// ══════════════════════════════════════════════
+// ADMIN MODAL (팀원관리 · 연동설정 · 카드관리 통합)
+// ══════════════════════════════════════════════
+let _adminTab='member';
+function openAdminModal(tab){
+  _adminTab=tab||_adminTab;
+  const savedUrl=localStorage.getItem('sb_url')||'';
+  const savedKey=localStorage.getItem('sb_key')||'';
+  const dotCls=sbStatus==='connected'?'cd-green':sbStatus==='offline'?'cd-yellow':'cd-gray';
+  const boxCls=sbStatus==='connected'?'csb-connected':sbStatus==='offline'?'csb-offline':'csb-disconnected';
+  const statusTxt=sbStatus==='connected'?'🟢 Supabase 연결됨 · 실시간 동기화 활성':sbStatus==='offline'?'🟡 로컬 저장 모드 (오프라인)':'🔴 미연결 · Supabase 설정이 필요합니다';
+
+  const labelList=Object.entries(LABELS).map(([k,v])=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #E2E8F0;border-radius:7px;background:#F8FAFC">
+      <span class="lchip" style="background:${v.bg};color:${v.color};font-size:12px;padding:3px 9px;flex-shrink:0">${v.ico} ${v.name}</span>
+      <div style="display:flex;gap:4px;margin-left:auto">
+        <button class="btn btn-o btn-sm" onclick="_startEditLabel('${k}');_renderCardMgmtInAdmin()">✏️</button>
+        <button class="btn btn-r btn-sm" onclick="_deleteLabel('${k}')">🗑️</button>
+      </div>
+    </div>`).join('');
+  const emojiGrid=LABEL_EMOJIS.map(e=>
+    `<span onclick="_selEmoji('${e}',this)" style="cursor:pointer;font-size:18px;padding:3px;border-radius:4px;display:inline-flex;width:30px;height:30px;align-items:center;justify-content:center">${e}</span>`
+  ).join('');
+  const colorGrid2=COLOR_PALETTE.map(c=>
+    `<div onclick="_selLabelColor('${c}',this)" style="background:${c};width:24px;height:24px;border-radius:50%;cursor:pointer;border:2px solid transparent;display:inline-block;margin:2px;transition:transform .1s"></div>`
+  ).join('');
+
+  showModal('🔧 관리자 페이지',`
+    <div class="adm-tabs">
+      <button class="adm-tab ${_adminTab==='member'?'active':''}" onclick="_switchAdmTab('member')">👥 팀원 관리</button>
+      <button class="adm-tab ${_adminTab==='conn'?'active':''}" onclick="_switchAdmTab('conn')">⚙️ 연동 설정</button>
+      <button class="adm-tab ${_adminTab==='card'?'active':''}" onclick="_switchAdmTab('card')">🏷️ 카드 관리</button>
+    </div>
+
+    <!-- 팀원 관리 -->
+    <div class="adm-pane ${_adminTab==='member'?'active':''}" id="adm-pane-member">
+      <div style="margin-bottom:14px">
+        <div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:8px">현재 팀원 (${MEMBERS.length}명)</div>
+        <div id="mem-list">${renderMemList()}</div>
+      </div>
+      <div class="add-mem-box">
+        <h4>+ 새 팀원 추가</h4>
+        <div class="fr-row">
+          <div class="fr" style="margin:0"><label>이름</label><input id="nm-name" placeholder="이름 입력"></div>
+          <div class="fr" style="margin:0"><label>역할</label><input id="nm-role" placeholder="예: 채용담당"></div>
+        </div>
+        <div style="margin-top:8px"><div style="font-size:11px;color:#475569;margin-bottom:5px;font-weight:600">아바타 색상</div>
+        <div class="color-grid">${COLOR_PALETTE.map(c=>`<div class="cswatch ${c===newMemberColor?'sel':''}" style="background:${c}" onclick="setNewColor('${c}')"></div>`).join('')}</div></div>
+        <button class="btn btn-p btn-sm" style="margin-top:10px" onclick="addMember()">+ 추가</button>
+      </div>
+    </div>
+
+    <!-- 연동 설정 -->
+    <div class="adm-pane ${_adminTab==='conn'?'active':''}" id="adm-pane-conn">
+      <div class="conn-status-box ${boxCls}"><div class="conn-dot ${dotCls}"></div><span>${statusTxt}</span></div>
+      <div class="fr"><label>Supabase Project URL</label><input id="sb-url" value="${savedUrl}" placeholder="https://xxxx.supabase.co"></div>
+      <div class="fr"><label>Supabase Anon Key</label><input id="sb-key" value="${savedKey}" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn btn-p" onclick="saveSupabaseConfig()">💾 저장 & 연결</button>
+        <button class="btn btn-o" onclick="testSupabaseConn()">🔌 연결 테스트</button>
+        ${sbStatus==='connected'?`<button class="btn btn-o" onclick="pushAllToSupabase()">⬆️ 전체 동기화</button>`:''}
+        ${savedUrl?`<button class="btn btn-ghost" onclick="disconnectSupabase()">연결 해제</button>`:''}
+        ${(savedUrl||SB_PRESET_URL)?`<button class="btn btn-o" onclick="downloadConfiguredHTML()" style="background:#059669;color:#fff;border-color:#059669">📥 설정 저장 파일</button>`:''}
+      </div>
+      ${(savedUrl||SB_PRESET_URL)?`<div style="padding:8px 0;font-size:11.5px;color:#059669;line-height:1.6">
+        ✅ <b>영구 저장 방법</b>: 파일 다운로드 → GitHub 업로드 → Vercel 자동 재배포
+      </div>`:''}
+      <details>
+        <summary>📄 Supabase 테이블 생성 SQL</summary>
+        <div style="margin-top:8px">
+          <button class="btn btn-o btn-sm" style="margin-bottom:6px" onclick="copySchema()">📋 SQL 복사</button>
+          <div class="schema-box"><pre id="schema-pre">${SQL_SCHEMA}</pre></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- 카드 관리 -->
+    <div class="adm-pane ${_adminTab==='card'?'active':''}" id="adm-pane-card">
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:8px">📋 분류 태그 목록</div>
+        <div style="display:flex;flex-direction:column;gap:5px">${labelList}</div>
+      </div>
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:12px">
+        <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:10px" id="lf-title">➕ 새 태그 추가</div>
+        <div class="fr"><label>태그 이름</label><input id="lf-name" placeholder="예: 긴급처리" maxlength="12" style="font-size:13px"></div>
+        <div class="fr"><label>색상</label>
+          <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px" id="lf-cpick">${colorGrid2}</div>
+          <input id="lf-color" type="color" value="${COLOR_PALETTE[0]}" style="width:100%;height:34px;border-radius:5px;border:1px solid #CBD5E1;cursor:pointer">
+        </div>
+        <div class="fr"><label>아이콘 (이모지)</label>
+          <div style="display:flex;flex-wrap:wrap;gap:1px;margin-bottom:5px" id="lf-epick">${emojiGrid}</div>
+          <input id="lf-ico" placeholder="직접 입력" maxlength="2" style="width:60px;text-align:center;font-size:18px">
+        </div>
+        <div style="display:flex;gap:6px;margin-top:2px">
+          <button class="btn btn-p" id="lf-save" onclick="_saveLabelForm()">➕ 추가</button>
+          <button class="btn btn-ghost" id="lf-cancel" onclick="_cancelEditLabel()" style="display:none">취소</button>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid #E2E8F0">
+        <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:8px">⚙️ WIP 한도</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:#475569">1인당 최대 진행 카드</span>
+          <input id="lf-wip" type="number" min="1" max="20" value="${WIP_MAX}"
+            style="width:64px;text-align:center;padding:6px;border:1px solid #CBD5E1;border-radius:5px;font-size:14px;font-weight:700">
+          <button class="btn btn-o btn-sm" onclick="_saveWipMax()">저장</button>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid #E2E8F0;text-align:right">
+        <button class="btn btn-ghost" onclick="_resetLabels()" style="font-size:11px;color:#94A3B8">기본값으로 초기화</button>
+      </div>
+    </div>
+  `,`<div></div><div><button class="btn btn-p" onclick="closeModal()">닫기</button></div>`);
+
+  if(!_cardMgmtEditKey && _adminTab==='card'){
+    const fi=$('lf-ico');if(fi)fi.value=LABEL_EMOJIS[0];
+  }
+}
+
+function _switchAdmTab(tab){
+  _adminTab=tab;
+  document.querySelectorAll('.adm-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.adm-pane').forEach(p=>p.classList.remove('active'));
+  const tabBtn=document.querySelector(`.adm-tab[onclick="_switchAdmTab('${tab}')"]`);
+  if(tabBtn)tabBtn.classList.add('active');
+  const pane=$('adm-pane-'+tab);
+  if(pane)pane.classList.add('active');
+}
+
+function _renderCardMgmtInAdmin(){openAdminModal('card');}
+
+// ── 기존 openMembersModal / openSettingsModal / openCardMgmtModal 유지 (호환) ──
+function openMembersModal(){openAdminModal('member');}
+function openSettingsModal(){openAdminModal('conn');}
 // ══════════════════════════════════════════════
 // MEMBER MANAGEMENT
 // ══════════════════════════════════════════════

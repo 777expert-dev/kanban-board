@@ -481,7 +481,7 @@ let GUIDE_CONTENT = {
     }
   ]
 };
-function saveGuideContent(){ try{ localStorage.setItem('kb_guide', JSON.stringify(GUIDE_CONTENT)); }catch(e){} }
+function saveGuideContent(){ try{ localStorage.setItem('kb_guide', JSON.stringify(GUIDE_CONTENT)); }catch(e){} _pushGuide(); }
 function loadGuideContent(){ try{ const s=localStorage.getItem('kb_guide'); if(s) GUIDE_CONTENT=JSON.parse(s); }catch(e){} }
 
 
@@ -895,6 +895,17 @@ async function _pushSettings(){
     await sb.from('settings').upsert([
       {key:'labels', value:JSON.stringify(LABELS), updated_at:new Date().toISOString()},
       {key:'wip_max', value:String(WIP_MAX), updated_at:new Date().toISOString()},
+      {key:'guide', value:JSON.stringify(GUIDE_CONTENT), updated_at:new Date().toISOString()},
+    ]);
+  }catch(e){}
+}
+
+// 칸반 안내 내용만 별도 push (저장 즉시 반영용)
+async function _pushGuide(){
+  if(!sb||sbStatus!=='connected') return;
+  try{
+    await sb.from('settings').upsert([
+      {key:'guide', value:JSON.stringify(GUIDE_CONTENT), updated_at:new Date().toISOString()},
     ]);
   }catch(e){}
 }
@@ -908,6 +919,7 @@ async function _pullSettings(){
     for(const row of data){
       if(row.key==='labels'){try{LABELS=JSON.parse(row.value);SB_PRESET_LABELS=LABELS;changed=true;}catch(e){}}
       if(row.key==='wip_max'){const v=parseInt(row.value);if(!isNaN(v)){WIP_MAX=v;SB_PRESET_WIP_MAX=v;changed=true;}}
+      if(row.key==='guide'){try{GUIDE_CONTENT=JSON.parse(row.value);localStorage.setItem('kb_guide',row.value);changed=true;}catch(e){}}
     }
     if(changed){
       try{localStorage.setItem('kb_labels',JSON.stringify(LABELS));localStorage.setItem('kb_wip_max',String(WIP_MAX));}catch(e){}

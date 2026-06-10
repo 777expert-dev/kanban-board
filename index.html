@@ -348,8 +348,8 @@ let sbStatus = 'disconnected'; // connected | offline | disconnected
 let syncLock = false;
 // ── Supabase 영구 설정 ────────────────────────────────────────────
 // 아래 두 줄에 직접 입력하면 모든 기기에서 자동 연결 (localStorage 불필요)
-let SB_PRESET_URL = '';  // 예: 'https://abcd1234.supabase.co'
-let SB_PRESET_KEY = '';  // 예: 'eyJhbGci...'
+let SB_PRESET_URL = 'https://uelfcuvmlopurfebjowp.supabase.co';  // 예: 'https://abcd1234.supabase.co'
+let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'
 // ─────────────────────────────────────────────────────────────────
 
 async function initSupabase() {
@@ -1124,9 +1124,9 @@ function downloadConfiguredHTML(){
   const key=SB_PRESET_KEY||localStorage.getItem('sb_key')||'';
   if(!url||!key){toast('먼저 저장 & 연결을 완료해주세요','warn');return;}
   let html=document.documentElement.outerHTML;
-  html=html.replace("let SB_PRESET_URL = '';  // 예: 'https://abcd1234.supabase.co'",
+  html=html.replace("let SB_PRESET_URL = 'https://uelfcuvmlopurfebjowp.supabase.co';  // 예: 'https://abcd1234.supabase.co'",
     "let SB_PRESET_URL = '"+url+"';  // 예: 'https://abcd1234.supabase.co'");
-  html=html.replace("let SB_PRESET_KEY = '';  // 예: 'eyJhbGci...'",
+  html=html.replace("let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'",
     "let SB_PRESET_KEY = '"+key+"';  // 예: 'eyJhbGci...'");
   const blob=new Blob([html],{type:'text/html'});
   const a=document.createElement('a');

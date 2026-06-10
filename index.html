@@ -744,6 +744,34 @@ let tasks = [
     checklist:[{id:'c70',text:'품목 및 수량 확인',done:true},{id:'c71',text:'발주서 작성',done:true},{id:'c72',text:'결재 완료',done:true},{id:'c73',text:'배송 확인',done:true}],
     blocker:'',blockedAt:'',note:'',doneDate:'06/10'},
 ];
+
+// ── 기본 예시 데이터 (초기화 시 복원용) ──
+const DEFAULT_TASKS = () => JSON.parse(JSON.stringify([
+  {id:'t1',title:'교내 임대공간 계약 갱신',assignee:'조호영',label:'admin',due:'07/31',status:'backlog',checklist:[{id:'c1',text:'임대료 검토',done:false},{id:'c2',text:'계약서 작성',done:false},{id:'c3',text:'결재 상신',done:false}],blocker:'',blockedAt:'',note:'',doneDate:''},
+  {id:'t2',title:'하반기 채용 계획 수립',assignee:'강노원',label:'tft',due:'07/15',status:'backlog',checklist:[{id:'c4',text:'수요조사',done:false},{id:'c5',text:'기획안 작성',done:false},{id:'c6',text:'부총장 보고',done:false}],blocker:'',blockedAt:'',note:'',doneDate:''},
+  {id:'t3',title:'2학기 동아리 지원금 배분',assignee:'진예원',label:'ops',due:'07/10',status:'backlog',checklist:[{id:'c7',text:'신청 취합',done:false},{id:'c8',text:'배분 기준 확인',done:false}],blocker:'학생처 협의 후 진행',blockedAt:'',note:'',doneDate:''},
+  {id:'t4',title:'행정직 채용공고 등록',assignee:'김성현',label:'hr',due:'06/15',status:'prog',checklist:[{id:'c9',text:'공고문 작성',done:true},{id:'c10',text:'나인하이어 등록',done:true},{id:'c11',text:'홈페이지 게시',done:false}],blocker:'',blockedAt:'',note:'완료 기준: 나인하이어+홈페이지 게시 확인',doneDate:''},
+  {id:'t5',title:'6월 급여 결의 처리',assignee:'김주은',label:'ops',due:'06/20',status:'prog',checklist:[{id:'c12',text:'대상자 확인',done:true},{id:'c13',text:'급여 계산',done:true},{id:'c14',text:'결의 상신',done:false},{id:'c15',text:'계좌 이체',done:false}],blocker:'',blockedAt:'',note:'',doneDate:''},
+  {id:'t6',title:'경력산정 기준표 초안',assignee:'강노원',label:'tft',due:'06/20',status:'prog',checklist:[{id:'c16',text:'타 대학 기준 수집',done:true},{id:'c17',text:'초안 작성',done:false},{id:'c18',text:'내부 검토',done:false}],blocker:'',blockedAt:'',note:'',doneDate:''},
+  {id:'t7',title:'채용위원회 일정 확정',assignee:'강노원',label:'hr',due:'06/12',status:'review',checklist:[{id:'c19',text:'위원 섭외',done:true},{id:'c20',text:'일정 조율',done:true},{id:'c21',text:'장소 예약',done:false}],blocker:'외부 위원 2명 일정 미확인',blockedAt:'2026-06-07',note:'',doneDate:''},
+  {id:'t8',title:'자산 재물조사 공문 발송',assignee:'조호영',label:'ops',due:'06/30',status:'review',checklist:[{id:'c22',text:'공문 기안',done:true},{id:'c23',text:'부서장 결재',done:false}],blocker:'부서장 결재 대기 3일째',blockedAt:'2026-06-06',note:'',doneDate:''},
+  {id:'t9',title:'복합기 임대료 6월분 정산',assignee:'진예원',label:'ops',due:'06/09',status:'done',checklist:[{id:'c24',text:'청구서 확인',done:true},{id:'c25',text:'지출결의',done:true}],blocker:'',blockedAt:'',note:'',doneDate:'06/09'},
+  {id:'t10',title:'6월 임금대장 작성',assignee:'김주은',label:'ops',due:'06/11',status:'done',checklist:[{id:'c26',text:'임금대장 작성',done:true},{id:'c27',text:'결재 상신',done:true}],blocker:'',blockedAt:'',note:'',doneDate:'06/09'},
+  {id:'t11',title:'하계 방학 인턴 채용공고 준비',assignee:'김성현',label:'hr',due:'2026-07-01',status:'backlog',checklist:[{id:'c28',text:'부서별 수요조사',done:false},{id:'c29',text:'공고문 초안 작성',done:false},{id:'c30',text:'학생처 협의',done:false},{id:'c31',text:'채용 플랫폼 등록',done:false}],blocker:'',blockedAt:'',note:'7월 1일 공고 게시 목표',doneDate:''},
+  {id:'t12',title:'노후 PC 교체 계획 수립',assignee:'조호영',label:'admin',due:'2026-07-15',status:'backlog',checklist:[{id:'c32',text:'교체 대상 목록 확정',done:false},{id:'c33',text:'3개 업체 견적 요청',done:false},{id:'c34',text:'예산 검토',done:false}],blocker:'',blockedAt:'',note:'5년 이상 노후 PC 우선 교체',doneDate:''},
+  {id:'t13',title:'복지포인트 하반기 배정 계획',assignee:'진예원',label:'ops',due:'2026-07-31',status:'backlog',checklist:[{id:'c35',text:'배정 기준 확인',done:false},{id:'c36',text:'전직원 명단 취합',done:false},{id:'c37',text:'플랫폼 시스템 입력',done:false}],blocker:'',blockedAt:'',note:'복리후생 플랫폼 담당자 사전 협의 필요',doneDate:''},
+  {id:'t14',title:'취업규칙 연도별 개정 이력 정리',assignee:'강노원',label:'tft',due:'2026-08-31',status:'backlog',checklist:[{id:'c38',text:'구버전 문서 취합',done:false},{id:'c39',text:'변경사항 비교표 작성',done:false}],blocker:'',blockedAt:'',note:'법인 감사 대비 사전 정리',doneDate:''},
+  {id:'t15',title:'단체상해보험 갱신 견적 비교',assignee:'조호영',label:'admin',due:'2026-06-25',status:'prog',checklist:[{id:'c40',text:'현행 계약서 검토',done:true},{id:'c41',text:'3개 보험사 견적 수령',done:true},{id:'c42',text:'조건 비교표 작성',done:true},{id:'c43',text:'결재 상신',done:false}],blocker:'',blockedAt:'',note:'갱신 기한 7월 1일',doneDate:''},
+  {id:'t16',title:'신규직원 온보딩 자료 업데이트',assignee:'진예원',label:'hr',due:'2026-06-20',status:'prog',checklist:[{id:'c44',text:'기존 자료 검토',done:true},{id:'c45',text:'규정 변경사항 반영',done:true},{id:'c46',text:'영상 촬영',done:false},{id:'c47',text:'LMS 업로드',done:false}],blocker:'',blockedAt:'',note:'7월 입사자 오리엔테이션 전 완료 필요',doneDate:''},
+  {id:'t17',title:'교직원 명절 선물 업체 선정',assignee:'진예원',label:'ops',due:'2026-06-28',status:'prog',checklist:[{id:'c48',text:'후보 업체 조사',done:true},{id:'c49',text:'샘플 검토',done:false},{id:'c50',text:'결재 상신',done:false},{id:'c51',text:'발주 완료',done:false}],blocker:'',blockedAt:'',note:'3개 업체 비교 후 최저가 선정',doneDate:''},
+  {id:'t18',title:'취업규칙 개정안 법적 검토',assignee:'강노원',label:'tft',due:'2026-06-30',status:'review',checklist:[{id:'c52',text:'개정 내용 초안 작성',done:true},{id:'c53',text:'노무사 검토 의뢰',done:true},{id:'c54',text:'의견 반영 수정',done:false},{id:'c55',text:'노사 협의',done:false},{id:'c56',text:'이사회 보고',done:false}],blocker:'외부 노무사 검토 회신 대기 (의뢰 후 6일째)',blockedAt:'2026-06-04',note:'법적 효력 검토 필수',doneDate:''},
+  {id:'t19',title:'6월 교직원 역량 교육 장소 배정',assignee:'김성현',label:'hr',due:'2026-06-15',status:'review',checklist:[{id:'c57',text:'강사 섭외 완료',done:true},{id:'c58',text:'강의실 사용 신청',done:true},{id:'c59',text:'참가자 명단 취합',done:false}],blocker:'강의실 배정 총무처 승인 대기',blockedAt:'2026-06-09',note:'승인 지연 시 외부 대관 검토 필요',doneDate:''},
+  {id:'t20',title:'5월 출결 현황 취합 및 팀장 보고',assignee:'김주은',label:'ops',due:'06/09',status:'done',checklist:[{id:'c60',text:'출결 데이터 취합',done:true},{id:'c61',text:'이상자 확인 및 사유 징구',done:true},{id:'c62',text:'보고서 작성',done:true},{id:'c63',text:'팀장 보고',done:true}],blocker:'',blockedAt:'',note:'',doneDate:'06/09'},
+  {id:'t21',title:'주차 스티커 발급 기준 전직원 안내',assignee:'조호영',label:'admin',due:'06/08',status:'done',checklist:[{id:'c64',text:'안내문 작성',done:true},{id:'c65',text:'게시판 공지',done:true},{id:'c66',text:'개별 문자 발송',done:true}],blocker:'',blockedAt:'',note:'',doneDate:'06/08'},
+  {id:'t22',title:'상반기 채용 면접 결과 정리',assignee:'김성현',label:'hr',due:'06/10',status:'done',checklist:[{id:'c67',text:'면접 점수 취합',done:true},{id:'c68',text:'결과표 작성',done:true},{id:'c69',text:'채용위원회 공유',done:true}],blocker:'',blockedAt:'',note:'최종 합격자 3명 확정',doneDate:'06/10'},
+  {id:'t23',title:'교직원 기념품 발주 처리',assignee:'진예원',label:'ops',due:'06/10',status:'done',checklist:[{id:'c70',text:'품목 및 수량 확인',done:true},{id:'c71',text:'발주서 작성',done:true},{id:'c72',text:'결재 완료',done:true},{id:'c73',text:'배송 확인',done:true}],blocker:'',blockedAt:'',note:'',doneDate:'06/10'},
+]));
+
 let nextId=1;
 let nextClId=200;
 let filterMember='all';
@@ -1352,6 +1380,11 @@ function openAdminModal(tab){
         ${savedUrl?`<button class="btn btn-ghost" onclick="disconnectSupabase()">연결 해제</button>`:''}
         ${(savedUrl||SB_PRESET_URL)?`<button class="btn btn-o" onclick="downloadConfiguredHTML()" style="background:#059669;color:#fff;border-color:#059669">📥 설정 저장 파일</button>`:''}
       </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #E2E8F0">
+        <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:6px">🔄 데이터 초기화</div>
+        <button class="btn btn-o btn-sm" onclick="resetDemoData()" style="border-color:#D97706;color:#D97706">📋 예시 데이터로 초기화</button>
+        <div style="font-size:10.5px;color:#94A3B8;margin-top:4px">카드를 기본 예시 23개로 교체 (DB도 함께 반영)</div>
+      </div>
       ${(savedUrl||SB_PRESET_URL)?`<div style="padding:8px 0;font-size:11.5px;color:#059669;line-height:1.6">
         ✅ <b>영구 저장 방법</b>: 파일 다운로드 → GitHub 업로드 → Vercel 자동 재배포
       </div>`:''}
@@ -1764,6 +1797,27 @@ function disconnectSupabase(){
   closeModal();toast('연결 해제됨 · 로컬 모드로 전환');
 }
 
+async function resetDemoData(){
+  if(!confirm('예시 데이터를 초기화할까요?\n현재 카드가 모두 기본 예시 카드로 교체됩니다.'))return;
+  tasks=DEFAULT_TASKS();
+  saveToLocal();
+  if(sb&&sbStatus==='connected'){
+    syncLock=true;
+    try{
+      await sb.from('checklists').delete().neq('id','__none__');
+      await sb.from('tasks').delete().neq('id','__none__');
+      for(const t of tasks){
+        await sb.from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
+        if(t.checklist.length>0) await sb.from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
+      }
+    }finally{setTimeout(()=>syncLock=false,800);}
+  }
+  renderAll();
+  toast('예시 데이터 23개 초기화 완료');
+  openAdminModal('conn');
+}
+
+
 function copySchema(){
   const el=$('schema-pre');if(!el)return;
   navigator.clipboard.writeText(el.textContent).then(()=>toast('✅ SQL 복사됨')).catch(()=>toast('복사 실패 · 직접 선택하세요','warn'));
@@ -1796,7 +1850,11 @@ async function init(){
   sbStatus='offline';updateConnBadge();
   renderAll();
   const ok=await initSupabase();
-  if(ok){await loadFromSupabase();renderAll();}
+  if(ok){
+    await loadFromSupabase();
+    if(tasks.length===0){tasks=DEFAULT_TASKS();await pushAllToSupabase();}
+    renderAll();
+  }
 }
 init();
 

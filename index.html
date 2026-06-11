@@ -385,6 +385,16 @@ details summary:hover{color:#2563EB}
 .vac-cal-hdr{font-size:9.5px;font-weight:700;color:#94A3B8;padding:2px}
 .vac-dots{display:flex;gap:1px;justify-content:center;margin-top:1px;flex-wrap:wrap}
 .vac-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.ntc-item{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;margin-bottom:6px}
+.ntc-item.pinned{border-color:#BFDBFE;background:#EFF6FF}
+.ntc-pin{font-size:10px;color:#2563EB;font-weight:700;margin-right:4px}
+.ntc-title{font-size:13px;font-weight:700;color:#1E293B;line-height:1.3}
+.ntc-meta{font-size:11px;color:#94A3B8}
+.ntc-content{font-size:12px;color:#475569;white-space:pre-wrap;line-height:1.5;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px}
+.ntc-actions{display:flex;gap:5px;justify-content:flex-end;margin-top:4px}
+.ntc-tab{flex:1;padding:7px 10px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:#64748B;background:transparent;transition:all .15s;white-space:nowrap}
+.ntc-tab.active{background:#fff;color:#1F3864;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.ntc-tab:hover:not(.active){background:rgba(255,255,255,.6)}
 </style>
 </head>
 <body>
@@ -397,7 +407,7 @@ details summary:hover{color:#2563EB}
     <div id="conn-badge" class="cb-disconnected" onclick="openSettingsModal()">🔴 로컬</div>
     <div id="filter-row"></div>
     <button class="tb-btn" onclick="openGuideModal()">📖 칸반 안내</button>
-    <button class="tb-btn" onclick="openVacationModal()">📅 휴가</button>
+    <button class="tb-btn" onclick="openNoticeModal()">📢 팀 공지</button>
     <button class="tb-btn" onclick="openAdminModal('member')">🔧 관리자</button>
     <button class="tb-btn btn-add-main" onclick="addCardModal(null)">+ 카드 추가</button>
   </div>
@@ -547,6 +557,20 @@ create table if not exists vacations (
 alter table vacations enable row level security;
 create policy "public_all_vac" on vacations for all using (true) with check (true);
 alter publication supabase_realtime add table vacations;
+-- 공지사항 테이블
+create table if not exists notices (
+  id text primary key,
+  title text not null,
+  content text default \'\',
+  author text default \'\',
+  notice_date text not null,
+  pinned boolean default false,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table notices enable row level security;
+create policy "public_all_notices" on notices for all using (true) with check (true);
+alter publication supabase_realtime add table notices;
 `;
 
 // ══════════════════════════════════════════════
@@ -616,6 +640,12 @@ function subscribeRealtime() {
       if(vd) vacations=vd.map(v=>({id:v.id,name:v.member_name,startDate:v.start_date,endDate:v.end_date,type:v.type||'연차',note:v.note||''}));
       renderAll();
     })
+    .on('postgres_changes',{event:'*',schema:'public',table:'notices'}, async()=>{
+      if(syncLock) return;
+      const {data:nd}=await sb.from('notices').select('*').order('pinned',{ascending:false}).order('created_at',{ascending:false});
+      if(nd) notices=nd.map(n=>({id:n.id,title:n.title,content:n.content||'',author:n.author||'',date:n.notice_date,pinned:n.pinned||false}));
+      if(document.getElementById('overlay')?.classList.contains('show')) _renderNoticeModal();
+    })
     .subscribe();
 }
 
@@ -670,6 +700,8 @@ async function loadFromSupabase() {
   if(md&&md.length>0) MEMBERS=md;
   const {data:vd}=await sb.from('vacations').select('*').order('start_date');
   if(vd) vacations=vd.map(v=>({id:v.id,name:v.member_name,startDate:v.start_date,endDate:v.end_date,type:v.type||'연차',note:v.note||''}));
+  const {data:nd}=await sb.from('notices').select('*').order('pinned',{ascending:false}).order('created_at',{ascending:false});
+  if(nd) notices=nd.map(n=>({id:n.id,title:n.title,content:n.content||'',author:n.author||'',date:n.notice_date,pinned:n.pinned||false}));
   if(td) tasks=td.map(t=>({
     id:t.id,title:t.title,assignee:t.assignee||'',label:t.label||Object.keys(LABELS)[0],due:t.due||'',
     status:t.status||'backlog',blocker:t.blocker||'',blockedAt:t.blocked_at||'',
@@ -690,6 +722,7 @@ async function pushAllToSupabase() {
       if(t.checklist.length>0) await sb.from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
     }
     for(const v of vacations) await sb.from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});
+    for(const n of notices) await sb.from('notices').upsert({id:n.id,title:n.title,content:n.content,author:n.author,notice_date:n.date,pinned:n.pinned,updated_at:new Date().toISOString()});
     await _pushSettings();
     toast('✅ Supabase 동기화 완료');
   } catch(e){ toast('동기화 오류: '+e.message,'err'); }
@@ -704,6 +737,7 @@ function saveToLocal() {
     localStorage.setItem('kb_members', JSON.stringify(MEMBERS));
     localStorage.setItem('kb_tasks',   JSON.stringify(tasks));
     localStorage.setItem('kb_vacations', JSON.stringify(vacations));
+    localStorage.setItem('kb_notices', JSON.stringify(notices));
   } catch(e){}
 }
 function loadFromLocal() {
@@ -713,6 +747,7 @@ function loadFromLocal() {
     if(m){const md=JSON.parse(m);if(md.length>0)MEMBERS=md;}
     if(t){const td=JSON.parse(t);if(td.length>0)tasks=td;}
     const vl=localStorage.getItem('kb_vacations');if(vl){const vd=JSON.parse(vl);if(vd.length>0)vacations=vd;}
+    const nl=localStorage.getItem('kb_notices');if(nl){const nd=JSON.parse(nl);if(nd.length>0)notices=nd;}
   } catch(e){}
 }
 
@@ -813,10 +848,9 @@ const DEFAULT_TASKS = () => JSON.parse(JSON.stringify([
 ]));
 
 let vacations=[];
+let notices=[];
 const VAC_TYPES=['연차','반차(오전)','반차(오후)','병가','공가','기타'];
 const VAC_TYPE_COLOR={'연차':'#2563EB','반차(오전)':'#7C3AED','반차(오후)':'#9333EA','병가':'#DC2626','공가':'#D97706','기타':'#64748B'};
-let _vacCalYear=new Date().getFullYear();
-let _vacCalMonth=new Date().getMonth();
 let nextId=1;
 let nextClId=200;
 let filterMember='all';
@@ -1941,12 +1975,13 @@ $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal(
 
 
 // ══════════════════════════════════════════════
-// VACATION (휴가 일정)
+// NOTICE & VACATION (팀 공지)
 // ══════════════════════════════════════════════
 function todayStr(){const n=new Date();return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;}
 function isOnVacationToday(name){const t=todayStr();return vacations.some(v=>v.name===name&&v.startDate<=t&&v.endDate>=t);}
 function getVacationsOnDate(ds){return vacations.filter(v=>v.startDate<=ds&&v.endDate>=ds);}
 
+// ── SUPABASE: vacations ──
 async function pushVacation(v){
   saveToLocal();
   if(!sb||sbStatus!=='connected')return;
@@ -1962,26 +1997,175 @@ async function deleteVacationSB(id){
   finally{setTimeout(()=>syncLock=false,800);}
 }
 
-function openVacationModal(){
-  _vacCalYear=new Date().getFullYear();
-  _vacCalMonth=new Date().getMonth();
-  _renderVacModal();
+// ── SUPABASE: notices ──
+async function pushNotice(n){
+  saveToLocal();
+  if(!sb||sbStatus!=='connected')return;
+  syncLock=true;
+  try{await sb.from('notices').upsert({id:n.id,title:n.title,content:n.content,author:n.author,notice_date:n.date,pinned:n.pinned,updated_at:new Date().toISOString()});}
+  finally{setTimeout(()=>syncLock=false,800);}
+}
+async function deleteNoticeSB(id){
+  saveToLocal();
+  if(!sb||sbStatus!=='connected')return;
+  syncLock=true;
+  try{await sb.from('notices').delete().eq('id',id);}
+  finally{setTimeout(()=>syncLock=false,800);}
 }
 
-function _renderVacModal(){
-  const today=todayStr();
-  const now=new Date();
+// ── TEAM NOTICE MODAL ──
+let _noticeTab='notice';
+let _noticeEditId=null;
+let _vacCalYear=new Date().getFullYear();
+let _vacCalMonth=new Date().getMonth();
+let _vacEditId=null;
 
-  // 오늘 부재자
+function openNoticeModal(tab){
+  _noticeTab=tab||_noticeTab;
+  if(!tab){_vacCalYear=new Date().getFullYear();_vacCalMonth=new Date().getMonth();}
+  _renderNoticeModal();
+}
+function openVacationModal(){openNoticeModal('vacation');}
+function _switchNoticeTab(tab){
+  _noticeTab=tab;
+  _noticeEditId=null;
+  _vacEditId=null;
+  _renderNoticeModal();
+}
+
+function _renderNoticeModal(){
+  const tabBar=`<div class="adm-tabs" style="margin-bottom:12px">
+    <button class="ntc-tab ${_noticeTab==='notice'?'active':''}" onclick="_switchNoticeTab('notice')">📢 공지사항</button>
+    <button class="ntc-tab ${_noticeTab==='vacation'?'active':''}" onclick="_switchNoticeTab('vacation')">📅 휴가 일정</button>
+  </div>`;
+  const body=_noticeTab==='notice'?_renderNoticePane():_renderVacPane();
+  showModal('📢 팀 공지',tabBar+body,
+    `<div></div><div><button class="btn btn-p" onclick="closeModal()">닫기</button></div>`);
+}
+
+// ══════════════════════════════════════════════
+// 공지사항 탭
+// ══════════════════════════════════════════════
+function _renderNoticePane(){
+  const pinned=notices.filter(n=>n.pinned);
+  const regular=notices.filter(n=>!n.pinned);
+  const sorted=[...pinned,...regular];
+
+  function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function escA(s){return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+  const listHtml=sorted.length===0
+    ?'<div style="text-align:center;padding:20px;color:#94A3B8;font-size:12px">등록된 공지사항이 없습니다</div>'
+    :sorted.map(n=>`
+      <div class="ntc-item${n.pinned?' pinned':''}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <div class="ntc-title">${n.pinned?'<span class="ntc-pin">📌</span>':''}${escH(n.title)}</div>
+          <div class="ntc-actions">
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 6px" title="${n.pinned?'고정 해제':'상단 고정'}" onclick="togglePinNotice('${n.id}');event.stopPropagation()">${n.pinned?'📌':'📍'}</button>
+            <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 6px" onclick="openEditNotice('${n.id}');event.stopPropagation()">✏️</button>
+            <button class="btn btn-r btn-sm" onclick="deleteNotice('${n.id}');event.stopPropagation()">🗑</button>
+          </div>
+        </div>
+        <div class="ntc-meta">${escH(n.author||'작성자 없음')} · ${n.date}</div>
+        ${n.content?`<div class="ntc-content">${escH(n.content)}</div>`:''}
+      </div>`).join('');
+
+  const isEdit=_noticeEditId!=null;
+  const editing=isEdit?notices.find(n=>n.id===_noticeEditId):null;
+
+  function escA2(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  const formHtml=`
+    <div style="background:${isEdit?'#FFFBEB':'#F0F9FF'};border:1px solid ${isEdit?'#FDE68A':'#BAE6FD'};border-radius:8px;padding:12px;margin-top:10px">
+      <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:10px">${isEdit?'✏️ 공지 수정':'➕ 공지 등록'}</div>
+      <div class="fr" style="margin-bottom:8px"><label>제목</label><input id="ntc-title" placeholder="공지 제목" value="${isEdit?escA2(editing.title):''}"></div>
+      <div class="fr-row">
+        <div class="fr" style="margin-bottom:8px"><label>작성자</label><input id="ntc-author" placeholder="예: 김성현" value="${isEdit?escA2(editing.author):''}"></div>
+        <div class="fr" style="margin-bottom:8px"><label>날짜</label><input type="date" id="ntc-date" value="${isEdit?editing.date:todayStr()}"></div>
+      </div>
+      <div class="fr" style="margin-bottom:8px"><label>내용</label><textarea id="ntc-content" rows="3" style="resize:vertical;font-family:inherit;font-size:12.5px;padding:6px 8px;border:1px solid #CBD5E1;border-radius:6px;width:100%;box-sizing:border-box">${isEdit?escA2(editing.content):''}</textarea></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#475569;cursor:pointer">
+          <input type="checkbox" id="ntc-pin" ${isEdit&&editing.pinned?'checked':''}> 상단 고정
+        </label>
+        <div style="display:flex;gap:7px">
+          ${isEdit?`<button class="btn btn-ghost" onclick="_noticeEditId=null;_renderNoticeModal()">취소</button>`:''}
+          <button class="btn btn-p" onclick="${isEdit?`saveNotice('${_noticeEditId}')`:'addNotice()'}">${isEdit?'저장':'등록'}</button>
+        </div>
+      </div>
+    </div>`;
+
+  return listHtml+formHtml;
+}
+
+async function addNotice(){
+  const title=($('ntc-title')?.value||'').trim();
+  const author=($('ntc-author')?.value||'').trim();
+  const date=$('ntc-date')?.value||todayStr();
+  const content=($('ntc-content')?.value||'').trim();
+  const pinned=$('ntc-pin')?.checked||false;
+  if(!title){toast('제목을 입력하세요','warn');return;}
+  const n={id:uuid(),title,author,date,content,pinned};
+  if(pinned) notices.unshift(n); else notices.push(n);
+  notices.sort((a,b)=>Number(b.pinned)-Number(a.pinned));
+  await pushNotice(n);
+  toast(`✅ 공지 등록: ${title}`);
+  _renderNoticeModal();
+}
+
+function openEditNotice(id){
+  _noticeEditId=id;
+  _noticeTab='notice';
+  _renderNoticeModal();
+}
+
+async function saveNotice(id){
+  const n=notices.find(x=>x.id===id);
+  if(!n)return;
+  const title=($('ntc-title')?.value||'').trim();
+  const author=($('ntc-author')?.value||'').trim();
+  const date=$('ntc-date')?.value||todayStr();
+  const content=($('ntc-content')?.value||'').trim();
+  const pinned=$('ntc-pin')?.checked||false;
+  if(!title){toast('제목을 입력하세요','warn');return;}
+  n.title=title; n.author=author; n.date=date; n.content=content; n.pinned=pinned;
+  notices.sort((a,b)=>Number(b.pinned)-Number(a.pinned));
+  await pushNotice(n);
+  _noticeEditId=null;
+  toast('✅ 공지 수정 완료');
+  _renderNoticeModal();
+}
+
+async function deleteNotice(id){
+  const n=notices.find(x=>x.id===id);
+  if(!n||!confirm(`"${n.title}" 공지를 삭제할까요?`))return;
+  notices=notices.filter(x=>x.id!==id);
+  await deleteNoticeSB(id);
+  toast('삭제됨');
+  _renderNoticeModal();
+}
+
+async function togglePinNotice(id){
+  const n=notices.find(x=>x.id===id);
+  if(!n)return;
+  n.pinned=!n.pinned;
+  notices.sort((a,b)=>Number(b.pinned)-Number(a.pinned));
+  await pushNotice(n);
+  toast(n.pinned?'📌 고정됨':'고정 해제');
+  _renderNoticeModal();
+}
+
+// ══════════════════════════════════════════════
+// 휴가 일정 탭
+// ══════════════════════════════════════════════
+function _renderVacPane(){
+  const today=todayStr();
   const absentToday=vacations.filter(v=>v.startDate<=today&&v.endDate>=today);
   const absentHtml=absentToday.length===0
     ?'<div class="vac-today-box"><span>✅</span><span style="color:#92400E">오늘 부재자 없음 — 전원 출근</span></div>'
     :`<div class="vac-today-box"><span>🏖️</span><span style="color:#92400E;font-weight:700">오늘 부재:</span>${absentToday.map(v=>{const m=MEMBERS.find(x=>x.name===v.name);return `<span style="padding:2px 8px;border-radius:10px;background:${m?.color||'#94A3B8'};color:#fff;font-size:11px;font-weight:700">${v.name} ${v.type}</span>`;}).join('')}</div>`;
 
-  // 미니 달력
   const calHtml=_renderVacCal(_vacCalYear,_vacCalMonth);
-
-  // 예정 휴가 목록 (오늘 이후)
   const upcoming=[...vacations].filter(v=>v.endDate>=today).sort((a,b)=>a.startDate.localeCompare(b.startDate));
   const listHtml=upcoming.length===0
     ?'<div style="text-align:center;padding:16px;color:#94A3B8;font-size:12px">예정된 휴가 없음</div>'
@@ -1993,40 +2177,40 @@ function _renderVacModal(){
           <div class="av" style="background:${m?.color||'#94A3B8'};width:28px;height:28px;font-size:10px;flex-shrink:0">${v.name.slice(-2)}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:12.5px;font-weight:700;color:#1E293B">${v.name} <span class="vac-badge" style="background:${tc}22;color:${tc}">${v.type}</span>${isNow?'<span style="font-size:10px;color:#D97706;margin-left:4px">진행 중</span>':''}</div>
-            <div style="font-size:11px;color:#64748B;margin-top:2px">${v.startDate}${v.startDate!==v.endDate?` ~ ${v.endDate}`:''} ${v.note?`· ${v.note}`:''}</div>
+            <div style="font-size:11px;color:#64748B;margin-top:2px">${v.startDate}${v.startDate!==v.endDate?` ~ ${v.endDate}`:''}${v.note?` · ${v.note}`:''}</div>
           </div>
+          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 6px" onclick="openEditVacation('${v.id}')">✏️</button>
           <button class="btn btn-r btn-sm" onclick="deleteVacation('${v.id}')">🗑</button>
         </div>`;
       }).join('');
 
-  // 지난 휴가 목록 (토글)
   const past=vacations.filter(v=>v.endDate<today).sort((a,b)=>b.startDate.localeCompare(a.startDate));
-  const pastHtml=past.length>0?`<details style="margin-top:8px"><summary style="font-size:11.5px;color:#94A3B8;cursor:pointer;padding:4px 0">지난 휴가 ${past.length}건 보기</summary>
-    ${past.map(v=>{const m=MEMBERS.find(x=>x.name===v.name);const tc=VAC_TYPE_COLOR[v.type]||'#64748B';return `<div class="vac-item" style="opacity:.65"><div class="av" style="background:${m?.color||'#94A3B8'};width:24px;height:24px;font-size:9px;flex-shrink:0">${v.name.slice(-2)}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${v.name} <span class="vac-badge" style="background:${tc}22;color:${tc}">${v.type}</span></div><div style="font-size:11px;color:#94A3B8">${v.startDate}${v.startDate!==v.endDate?` ~ ${v.endDate}`:''}</div></div><button class="btn btn-r btn-sm" onclick="deleteVacation('${v.id}')">🗑</button></div>`;}).join('')}</details>`:'';
+  const pastHtml=past.length>0?`<details style="margin-top:8px"><summary style="font-size:11.5px;color:#94A3B8;cursor:pointer;padding:4px 0">지난 휴가 ${past.length}건 보기</summary>${past.map(v=>{const m=MEMBERS.find(x=>x.name===v.name);const tc=VAC_TYPE_COLOR[v.type]||'#64748B';return `<div class="vac-item" style="opacity:.65"><div class="av" style="background:${m?.color||'#94A3B8'};width:24px;height:24px;font-size:9px;flex-shrink:0">${v.name.slice(-2)}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${v.name} <span class="vac-badge" style="background:${tc}22;color:${tc}">${v.type}</span></div><div style="font-size:11px;color:#94A3B8">${v.startDate}${v.startDate!==v.endDate?` ~ ${v.endDate}`:''}</div></div><div style="display:flex;gap:4px"><button class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 5px" onclick="openEditVacation('${v.id}')">✏️</button><button class="btn btn-r btn-sm" onclick="deleteVacation('${v.id}')">🗑</button></div></div>`;}).join('')}</details>`:'';
 
-  // 등록 폼
-  const defStart=today;
-  const defEnd=today;
+  const isEdit=_vacEditId!=null;
+  const editing=isEdit?vacations.find(v=>v.id===_vacEditId):null;
+  const defStart=editing?.startDate||today;
+  const defEnd=editing?.endDate||today;
   const addForm=`
-    <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:12px;margin-top:10px">
-      <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:10px">➕ 휴가 등록</div>
+    <div style="background:${isEdit?'#FFFBEB':'#F0F9FF'};border:1px solid ${isEdit?'#FDE68A':'#BAE6FD'};border-radius:8px;padding:12px;margin-top:10px">
+      <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:10px">${isEdit?'✏️ 휴가 수정':'➕ 휴가 등록'}</div>
       <div class="fr-row">
-        <div class="fr" style="margin-bottom:8px"><label>팀원</label><select id="vac-who">${MEMBERS.map(m=>`<option>${m.name}</option>`).join('')}</select></div>
-        <div class="fr" style="margin-bottom:8px"><label>유형</label><select id="vac-type">${VAC_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
+        <div class="fr" style="margin-bottom:8px"><label>팀원</label><select id="vac-who">${MEMBERS.map(mm=>`<option${editing&&mm.name===editing.name?' selected':''}>${mm.name}</option>`).join('')}</select></div>
+        <div class="fr" style="margin-bottom:8px"><label>유형</label><select id="vac-type">${VAC_TYPES.map(t=>`<option${editing&&t===editing.type?' selected':''}>${t}</option>`).join('')}</select></div>
       </div>
       <div class="fr-row">
         <div class="fr" style="margin-bottom:8px"><label>시작일</label><input type="date" id="vac-start" value="${defStart}"></div>
         <div class="fr" style="margin-bottom:8px"><label>종료일</label><input type="date" id="vac-end" value="${defEnd}"></div>
       </div>
-      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="예: 개인 사유, 여행 등"></div>
-      <div style="text-align:right"><button class="btn btn-p" onclick="addVacation()">등록</button></div>
+      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="예: 개인 사유, 여행 등" value="${editing?.note||''}"></div>
+      <div style="display:flex;justify-content:flex-end;gap:7px">
+        ${isEdit?`<button class="btn btn-ghost" onclick="_vacEditId=null;_renderNoticeModal()">취소</button>`:''}
+        <button class="btn btn-p" onclick="${isEdit?`saveVacationEdit('${_vacEditId}')`:'addVacation()'}">${isEdit?'저장':'등록'}</button>
+      </div>
     </div>`;
 
-  showModal('📅 팀원 휴가 일정',
-    absentHtml + calHtml +
-    `<div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:7px">📋 휴가 일정 (${upcoming.length}건)</div>` +
-    listHtml + pastHtml + addForm,
-    `<div></div><div><button class="btn btn-p" onclick="closeModal()">닫기</button></div>`);
+  return `<div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:7px">📋 휴가 일정 (${upcoming.length}건)</div>`
+    +absentHtml+calHtml+listHtml+pastHtml+addForm;
 }
 
 function _renderVacCal(year, month){
@@ -2056,8 +2240,8 @@ function _renderVacCal(year, month){
   return g;
 }
 
-function _vacCalPrev(){_vacCalMonth--;if(_vacCalMonth<0){_vacCalMonth=11;_vacCalYear--;}_renderVacModal();}
-function _vacCalNext(){_vacCalMonth++;if(_vacCalMonth>11){_vacCalMonth=0;_vacCalYear++;}_renderVacModal();}
+function _vacCalPrev(){_vacCalMonth--;if(_vacCalMonth<0){_vacCalMonth=11;_vacCalYear--;}_renderNoticeModal();}
+function _vacCalNext(){_vacCalMonth++;if(_vacCalMonth>11){_vacCalMonth=0;_vacCalYear++;}_renderNoticeModal();}
 
 async function addVacation(){
   const name=($('vac-who')?.value||'').trim();
@@ -2072,7 +2256,31 @@ async function addVacation(){
   await pushVacation(v);
   renderAll();
   toast(`✅ ${name} ${type} 등록 완료`);
-  _renderVacModal();
+  _renderNoticeModal();
+}
+
+function openEditVacation(id){
+  _vacEditId=id;
+  _noticeTab='vacation';
+  _renderNoticeModal();
+}
+
+async function saveVacationEdit(id){
+  const v=vacations.find(x=>x.id===id);
+  if(!v)return;
+  const name=($('vac-who')?.value||'').trim();
+  const type=$('vac-type')?.value||'연차';
+  const start=$('vac-start')?.value;
+  const end=$('vac-end')?.value;
+  const note=($('vac-note')?.value||'').trim();
+  if(!name||!start||!end){toast('팀원과 날짜를 입력하세요','warn');return;}
+  if(start>end){toast('종료일이 시작일보다 빠릅니다','warn');return;}
+  v.name=name; v.startDate=start; v.endDate=end; v.type=type; v.note=note;
+  await pushVacation(v);
+  renderAll();
+  _vacEditId=null;
+  toast('✅ 휴가 수정 완료');
+  _renderNoticeModal();
 }
 
 async function deleteVacation(id){
@@ -2082,7 +2290,7 @@ async function deleteVacation(id){
   await deleteVacationSB(id);
   renderAll();
   toast('삭제됨');
-  _renderVacModal();
+  _renderNoticeModal();
 }
 
 // ══════════════════════════════════════════════

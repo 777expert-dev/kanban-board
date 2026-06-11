@@ -2202,7 +2202,7 @@ function _renderVacPane(){
         <div class="fr" style="margin-bottom:8px"><label>시작일</label><input type="date" id="vac-start" value="${defStart}"></div>
         <div class="fr" style="margin-bottom:8px"><label>종료일</label><input type="date" id="vac-end" value="${defEnd}"></div>
       </div>
-      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="예: 개인 사유, 여행 등" value="${editing?.note||''}"></div>
+      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="" value="${editing?.note||''}"></div>
       <div style="display:flex;justify-content:flex-end;gap:7px">
         ${isEdit?`<button class="btn btn-ghost" onclick="_vacEditId=null;_renderNoticeModal()">취소</button>`:''}
         <button class="btn btn-p" onclick="${isEdit?`saveVacationEdit('${_vacEditId}')`:'addVacation()'}">${isEdit?'저장':'등록'}</button>

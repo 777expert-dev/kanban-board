@@ -373,6 +373,18 @@ details summary:hover{color:#2563EB}
 /* ── INTRA-COLUMN DRAG INDICATOR ── */
 .card.drop-before{border-top:3px solid #2563EB !important;margin-top:-1px}
 .card.drop-after{border-bottom:3px solid #2563EB !important;margin-bottom:-1px}
+
+/* ── VACATION ── */
+.vac-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #E2E8F0;border-radius:7px;background:#F8FAFC;margin-bottom:5px}
+.vac-badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10.5px;font-weight:700;white-space:nowrap;flex-shrink:0}
+.vac-today-box{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:#FFF7ED;border:1px solid #FED7AA;margin-bottom:12px;font-size:12px;flex-wrap:wrap}
+.vac-cal{background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px;margin-bottom:12px}
+.vac-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.vac-cal-day{padding:3px 1px;border-radius:4px;cursor:default}
+.vac-cal-today{background:#DBEAFE}
+.vac-cal-hdr{font-size:9.5px;font-weight:700;color:#94A3B8;padding:2px}
+.vac-dots{display:flex;gap:1px;justify-content:center;margin-top:1px;flex-wrap:wrap}
+.vac-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -385,6 +397,7 @@ details summary:hover{color:#2563EB}
     <div id="conn-badge" class="cb-disconnected" onclick="openSettingsModal()">🔴 로컬</div>
     <div id="filter-row"></div>
     <button class="tb-btn" onclick="openGuideModal()">📖 칸반 안내</button>
+    <button class="tb-btn" onclick="openVacationModal()">📅 휴가</button>
     <button class="tb-btn" onclick="openAdminModal('member')">🔧 관리자</button>
     <button class="tb-btn btn-add-main" onclick="addCardModal(null)">+ 카드 추가</button>
   </div>
@@ -521,6 +534,19 @@ create table if not exists settings (
 );
 alter table settings enable row level security;
 create policy if not exists "Allow all settings" on settings for all using (true);
+-- 휴가 일정 테이블
+create table if not exists vacations (
+  id text primary key,
+  member_name text not null,
+  start_date text not null,
+  end_date text not null,
+  type text default '연차',
+  note text default '',
+  created_at timestamptz default now()
+);
+alter table vacations enable row level security;
+create policy "public_all_vac" on vacations for all using (true) with check (true);
+alter publication supabase_realtime add table vacations;
 `;
 
 // ══════════════════════════════════════════════
@@ -584,6 +610,12 @@ function subscribeRealtime() {
     .on('postgres_changes',{event:'*',schema:'public',table:'settings'}, async()=>{
       await _pullSettings(); renderAll();
     })
+    .on('postgres_changes',{event:'*',schema:'public',table:'vacations'}, async()=>{
+      if(syncLock) return;
+      const {data:vd}=await sb.from('vacations').select('*').order('start_date');
+      if(vd) vacations=vd.map(v=>({id:v.id,name:v.member_name,startDate:v.start_date,endDate:v.end_date,type:v.type||'연차',note:v.note||''}));
+      renderAll();
+    })
     .subscribe();
 }
 
@@ -636,6 +668,8 @@ async function loadFromSupabase() {
   const {data:td}=await sb.from('tasks').select('*').order('created_at');
   const {data:cd}=await sb.from('checklists').select('*').order('sort_order');
   if(md&&md.length>0) MEMBERS=md;
+  const {data:vd}=await sb.from('vacations').select('*').order('start_date');
+  if(vd) vacations=vd.map(v=>({id:v.id,name:v.member_name,startDate:v.start_date,endDate:v.end_date,type:v.type||'연차',note:v.note||''}));
   if(td) tasks=td.map(t=>({
     id:t.id,title:t.title,assignee:t.assignee||'',label:t.label||Object.keys(LABELS)[0],due:t.due||'',
     status:t.status||'backlog',blocker:t.blocker||'',blockedAt:t.blocked_at||'',
@@ -655,6 +689,7 @@ async function pushAllToSupabase() {
       await sb.from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
       if(t.checklist.length>0) await sb.from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
     }
+    for(const v of vacations) await sb.from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});
     await _pushSettings();
     toast('✅ Supabase 동기화 완료');
   } catch(e){ toast('동기화 오류: '+e.message,'err'); }
@@ -668,6 +703,7 @@ function saveToLocal() {
   try{
     localStorage.setItem('kb_members', JSON.stringify(MEMBERS));
     localStorage.setItem('kb_tasks',   JSON.stringify(tasks));
+    localStorage.setItem('kb_vacations', JSON.stringify(vacations));
   } catch(e){}
 }
 function loadFromLocal() {
@@ -676,6 +712,7 @@ function loadFromLocal() {
     const t=localStorage.getItem('kb_tasks');
     if(m){const md=JSON.parse(m);if(md.length>0)MEMBERS=md;}
     if(t){const td=JSON.parse(t);if(td.length>0)tasks=td;}
+    const vl=localStorage.getItem('kb_vacations');if(vl){const vd=JSON.parse(vl);if(vd.length>0)vacations=vd;}
   } catch(e){}
 }
 
@@ -775,6 +812,11 @@ const DEFAULT_TASKS = () => JSON.parse(JSON.stringify([
   {id:'t23',title:'교직원 기념품 발주 처리',assignee:'진예은',label:'ops',due:'06/10',status:'done',checklist:[{id:'c70',text:'품목 및 수량 확인',done:true},{id:'c71',text:'발주서 작성',done:true},{id:'c72',text:'결재 완료',done:true},{id:'c73',text:'배송 확인',done:true}],blocker:'',blockedAt:'',note:'',doneDate:'06/10'},
 ]));
 
+let vacations=[];
+const VAC_TYPES=['연차','반차(오전)','반차(오후)','병가','공가','기타'];
+const VAC_TYPE_COLOR={'연차':'#2563EB','반차(오전)':'#7C3AED','반차(오후)':'#9333EA','병가':'#DC2626','공가':'#D97706','기타':'#64748B'};
+let _vacCalYear=new Date().getFullYear();
+let _vacCalMonth=new Date().getMonth();
 let nextId=1;
 let nextClId=200;
 let filterMember='all';
@@ -1119,9 +1161,10 @@ function renderTopbar(){
   $('wip-row').innerHTML=MEMBERS.map(m=>{
     const cnt=prog.filter(t=>t.assignee===m.name).length;
     const cls=cnt>WIP_MAX?'wip-over':cnt===WIP_MAX?'wip-full':'';
+    const onVac=isOnVacationToday(m.name);
     return `<div class="wip-chip ${cls}" onclick="setFilter('${m.name}')" onmouseenter="showTip(event,'wip')" onmousemove="moveTip(event)" onmouseleave="hideTip()">
       <div class="wip-dot" style="background:${m.color}"></div>
-      <span>${m.name.slice(-2)} ${cnt}/${WIP_MAX}${cnt>WIP_MAX?' ⚠️':cnt===WIP_MAX?' 🔶':''}</span>
+      <span>${m.name.slice(-2)} ${onVac?'🏖️ ':'' }${cnt}/${WIP_MAX}${cnt>WIP_MAX?' ⚠️':cnt===WIP_MAX?' 🔶':''}</span>
     </div>`;
   }).join('');
   $('filter-row').innerHTML=`
@@ -1895,6 +1938,152 @@ function showModal(title, body, foot){
 }
 function closeModal(){$('overlay').classList.remove('show');editingMemberId=null;}
 $('overlay').addEventListener('click',e=>{if(e.target===$('overlay'))closeModal();});
+
+
+// ══════════════════════════════════════════════
+// VACATION (휴가 일정)
+// ══════════════════════════════════════════════
+function todayStr(){const n=new Date();return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;}
+function isOnVacationToday(name){const t=todayStr();return vacations.some(v=>v.name===name&&v.startDate<=t&&v.endDate>=t);}
+function getVacationsOnDate(ds){return vacations.filter(v=>v.startDate<=ds&&v.endDate>=ds);}
+
+async function pushVacation(v){
+  saveToLocal();
+  if(!sb||sbStatus!=='connected')return;
+  syncLock=true;
+  try{await sb.from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});}
+  finally{setTimeout(()=>syncLock=false,800);}
+}
+async function deleteVacationSB(id){
+  saveToLocal();
+  if(!sb||sbStatus!=='connected')return;
+  syncLock=true;
+  try{await sb.from('vacations').delete().eq('id',id);}
+  finally{setTimeout(()=>syncLock=false,800);}
+}
+
+function openVacationModal(){
+  _vacCalYear=new Date().getFullYear();
+  _vacCalMonth=new Date().getMonth();
+  _renderVacModal();
+}
+
+function _renderVacModal(){
+  const today=todayStr();
+  const now=new Date();
+
+  // 오늘 부재자
+  const absentToday=vacations.filter(v=>v.startDate<=today&&v.endDate>=today);
+  const absentHtml=absentToday.length===0
+    ?'<div class="vac-today-box"><span>✅</span><span style="color:#92400E">오늘 부재자 없음 — 전원 출근</span></div>'
+    :`<div class="vac-today-box"><span>🏖️</span><span style="color:#92400E;font-weight:700">오늘 부재:</span>${absentToday.map(v=>{const m=MEMBERS.find(x=>x.name===v.name);return `<span style="padding:2px 8px;border-radius:10px;background:${m?.color||'#94A3B8'};color:#fff;font-size:11px;font-weight:700">${v.name} ${v.type}</span>`;}).join('')}</div>`;
+
+  // 미니 달력
+  const calHtml=_renderVacCal(_vacCalYear,_vacCalMonth);
+
+  // 예정 휴가 목록 (오늘 이후)
+  const upcoming=[...vacations].filter(v=>v.endDate>=today).sort((a,b)=>a.startDate.localeCompare(b.startDate));
+  const listHtml=upcoming.length===0
+    ?'<div style="text-align:center;padding:16px;color:#94A3B8;font-size:12px">예정된 휴가 없음</div>'
+    :upcoming.map(v=>{
+        const m=MEMBERS.find(x=>x.name===v.name);
+        const tc=VAC_TYPE_COLOR[v.type]||'#64748B';
+        const isNow=v.startDate<=today&&v.endDate>=today;
+        return `<div class="vac-item">
+          <div class="av" style="background:${m?.color||'#94A3B8'};width:28px;height:28px;font-size:10px;flex-shrink:0">${v.name.slice(-2)}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12.5px;font-weight:700;color:#1E293B">${v.name} <span class="vac-badge" style="background:${tc}22;color:${tc}">${v.type}</span>${isNow?'<span style="font-size:10px;color:#D97706;margin-left:4px">진행 중</span>':''}</div>
+            <div style="font-size:11px;color:#64748B;margin-top:2px">${v.startDate}${v.startDate!==v.endDate?` ~ ${v.endDate}`:''} ${v.note?`· ${v.note}`:''}</div>
+          </div>
+          <button class="btn btn-r btn-sm" onclick="deleteVacation('${v.id}')">🗑</button>
+        </div>`;
+      }).join('');
+
+  // 지난 휴가 목록 (토글)
+  const past=vacations.filter(v=>v.endDate<today).sort((a,b)=>b.startDate.localeCompare(a.startDate));
+  const pastHtml=past.length>0?`<details style="margin-top:8px"><summary style="font-size:11.5px;color:#94A3B8;cursor:pointer;padding:4px 0">지난 휴가 ${past.length}건 보기</summary>
+    ${past.map(v=>{const m=MEMBERS.find(x=>x.name===v.name);const tc=VAC_TYPE_COLOR[v.type]||'#64748B';return `<div class="vac-item" style="opacity:.65"><div class="av" style="background:${m?.color||'#94A3B8'};width:24px;height:24px;font-size:9px;flex-shrink:0">${v.name.slice(-2)}</div><div style="flex:1"><div style="font-size:12px;font-weight:600">${v.name} <span class="vac-badge" style="background:${tc}22;color:${tc}">${v.type}</span></div><div style="font-size:11px;color:#94A3B8">${v.startDate}${v.startDate!==v.endDate?` ~ ${v.endDate}`:''}</div></div><button class="btn btn-r btn-sm" onclick="deleteVacation('${v.id}')">🗑</button></div>`;}).join('')}</details>`:'';
+
+  // 등록 폼
+  const defStart=today;
+  const defEnd=today;
+  const addForm=`
+    <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:12px;margin-top:10px">
+      <div style="font-size:12px;font-weight:700;color:#1F3864;margin-bottom:10px">➕ 휴가 등록</div>
+      <div class="fr-row">
+        <div class="fr" style="margin-bottom:8px"><label>팀원</label><select id="vac-who">${MEMBERS.map(m=>`<option>${m.name}</option>`).join('')}</select></div>
+        <div class="fr" style="margin-bottom:8px"><label>유형</label><select id="vac-type">${VAC_TYPES.map(t=>`<option>${t}</option>`).join('')}</select></div>
+      </div>
+      <div class="fr-row">
+        <div class="fr" style="margin-bottom:8px"><label>시작일</label><input type="date" id="vac-start" value="${defStart}"></div>
+        <div class="fr" style="margin-bottom:8px"><label>종료일</label><input type="date" id="vac-end" value="${defEnd}"></div>
+      </div>
+      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="예: 개인 사유, 여행 등"></div>
+      <div style="text-align:right"><button class="btn btn-p" onclick="addVacation()">등록</button></div>
+    </div>`;
+
+  showModal('📅 팀원 휴가 일정',
+    absentHtml + calHtml +
+    `<div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:7px">📋 휴가 일정 (${upcoming.length}건)</div>` +
+    listHtml + pastHtml + addForm,
+    `<div></div><div><button class="btn btn-p" onclick="closeModal()">닫기</button></div>`);
+}
+
+function _renderVacCal(year, month){
+  const firstDay=new Date(year,month,1).getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const today=todayStr();
+  const dayNames=['일','월','화','수','목','금','토'];
+  let g=`<div class="vac-cal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <button class="btn btn-ghost" style="padding:2px 8px" onclick="_vacCalPrev()">‹</button>
+      <div style="font-size:12px;font-weight:700;color:#1F3864">${year}년 ${month+1}월</div>
+      <button class="btn btn-ghost" style="padding:2px 8px" onclick="_vacCalNext()">›</button>
+    </div>
+    <div class="vac-cal-grid">`;
+  for(const d of dayNames) g+=`<div class="vac-cal-hdr" style="${d==='일'?'color:#DC2626':d==='토'?'color:#2563EB':''}">${d}</div>`;
+  for(let i=0;i<firstDay;i++) g+=`<div></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayVacs=getVacationsOnDate(ds);
+    const isToday=ds===today;
+    const dow=new Date(year,month,d).getDay();
+    const wkColor=dow===0?'#DC2626':dow===6?'#2563EB':'#334155';
+    const dots=dayVacs.length>0?`<div class="vac-dots">${dayVacs.slice(0,4).map(v=>{const m=MEMBERS.find(x=>x.name===v.name);return `<div class="vac-dot" style="background:${m?.color||'#94A3B8'}" title="${v.name}"></div>`;}).join('')}</div>`:'';
+    g+=`<div class="vac-cal-day ${isToday?'vac-cal-today':''}"><div style="font-size:10.5px;color:${wkColor};${isToday?'font-weight:700':''}">${d}</div>${dots}</div>`;
+  }
+  g+=`</div></div>`;
+  return g;
+}
+
+function _vacCalPrev(){_vacCalMonth--;if(_vacCalMonth<0){_vacCalMonth=11;_vacCalYear--;}_renderVacModal();}
+function _vacCalNext(){_vacCalMonth++;if(_vacCalMonth>11){_vacCalMonth=0;_vacCalYear++;}_renderVacModal();}
+
+async function addVacation(){
+  const name=($('vac-who')?.value||'').trim();
+  const type=$('vac-type')?.value||'연차';
+  const start=$('vac-start')?.value;
+  const end=$('vac-end')?.value;
+  const note=($('vac-note')?.value||'').trim();
+  if(!name||!start||!end){toast('팀원과 날짜를 입력하세요','warn');return;}
+  if(start>end){toast('종료일이 시작일보다 빠릅니다','warn');return;}
+  const v={id:uuid(),name,startDate:start,endDate:end,type,note};
+  vacations.push(v);
+  await pushVacation(v);
+  renderAll();
+  toast(`✅ ${name} ${type} 등록 완료`);
+  _renderVacModal();
+}
+
+async function deleteVacation(id){
+  const v=vacations.find(x=>x.id===id);
+  if(!v||!confirm(`${v.name} ${v.type} 일정을 삭제할까요?`))return;
+  vacations=vacations.filter(x=>x.id!==id);
+  await deleteVacationSB(id);
+  renderAll();
+  toast('삭제됨');
+  _renderVacModal();
+}
 
 // ══════════════════════════════════════════════
 // FILTER

@@ -388,7 +388,7 @@ details summary:hover{color:#2563EB}
 .ntc-item{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border:1px solid #E2E8F0;border-radius:8px;background:#F8FAFC;margin-bottom:6px}
 .ntc-item.pinned{border-color:#BFDBFE;background:#EFF6FF}
 .ntc-pin{font-size:10px;color:#2563EB;font-weight:700;margin-right:4px}
-.ntc-title{font-size:13.5px;font-weight:800;color:#1D4ED8;line-height:1.3}
+.ntc-title{font-size:13px;font-weight:700;color:#1E293B;line-height:1.3}
 .ntc-meta{font-size:11px;color:#94A3B8}
 .ntc-content{font-size:12px;color:#475569;white-space:pre-wrap;line-height:1.5;border-top:1px solid #E2E8F0;margin-top:6px;padding-top:6px}
 .ntc-actions{display:flex;gap:5px;justify-content:flex-end;margin-top:4px}
@@ -581,8 +581,8 @@ let sbStatus = 'disconnected'; // connected | offline | disconnected
 let syncLock = false;
 // ── Supabase 영구 설정 ────────────────────────────────────────────
 // 아래 두 줄에 직접 입력하면 모든 기기에서 자동 연결 (localStorage 불필요)
-let SB_PRESET_URL = 'https://uelfcuvmlopurfebjowp.supabase.co';  // 예: 'https://abcd1234.supabase.co'
-let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbGZjdXZtbG9wdXJmZWJqb3dwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjUyMTUsImV4cCI6MjA5NjYwMTIxNX0.bLOYPX-62W2uUrW6KBappmcly5qFbChvmAOZGdifUDY';  // 예: 'eyJhbGci...'
+let SB_PRESET_URL = 'https://dhvesnfohfinohtwvaqz.supabase.co';  // 예: 'https://abcd1234.supabase.co'
+let SB_PRESET_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRodmVzbmZvaGZpbm9odHd2YXF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NDg2MzUsImV4cCI6MjA5NTUyNDYzNX0.Cof6JVNw05suj19UVEkqksFL9gb4ZltzYVg_8E9UUqc';  // 예: 'eyJhbGci...'
 let SB_PRESET_LABELS = null;   // 저장 파일 다운로드 시 자동 설정됨
 let SB_PRESET_WIP_MAX = null;  // 저장 파일 다운로드 시 자동 설정됨
 // ─────────────────────────────────────────────────────────────────
@@ -593,7 +593,7 @@ async function initSupabase() {
   if (!url || !key) { sbStatus='disconnected'; updateConnBadge(); return false; }
   try {
     sb = window.supabase.createClient(url, key);
-    const {error} = await sb.from('members').select('id').limit(1);
+    const {error} = await sb.schema('kanban').from('members').select('id').limit(1);
     if (error) throw error;
     sbStatus = 'connected';
     updateConnBadge();
@@ -617,32 +617,32 @@ function updateConnBadge() {
 function subscribeRealtime() {
   if(!sb) return;
   sb.channel('kanban-rt')
-    .on('postgres_changes',{event:'*',schema:'public',table:'tasks'}, async()=>{
+    .on('postgres_changes',{event:'*',schema:'kanban',table:'tasks'}, async()=>{
       if(syncLock) return;
       await loadFromSupabase(); renderAll();
     })
-    .on('postgres_changes',{event:'*',schema:'public',table:'members'}, async()=>{
+    .on('postgres_changes',{event:'*',schema:'kanban',table:'members'}, async()=>{
       if(syncLock) return;
-      const {data:m}=await sb.from('members').select('*').order('sort_order');
+      const {data:m}=await sb.schema('kanban').from('members').select('*').order('sort_order');
       if(m&&m.length>0) MEMBERS=m;
       renderAll();
     })
-    .on('postgres_changes',{event:'*',schema:'public',table:'checklists'}, async()=>{
+    .on('postgres_changes',{event:'*',schema:'kanban',table:'checklists'}, async()=>{
       if(syncLock) return;
       await loadFromSupabase(); renderAll();
     })
-    .on('postgres_changes',{event:'*',schema:'public',table:'settings'}, async()=>{
+    .on('postgres_changes',{event:'*',schema:'kanban',table:'settings'}, async()=>{
       await _pullSettings(); renderAll();
     })
-    .on('postgres_changes',{event:'*',schema:'public',table:'vacations'}, async()=>{
+    .on('postgres_changes',{event:'*',schema:'kanban',table:'vacations'}, async()=>{
       if(syncLock) return;
-      const {data:vd}=await sb.from('vacations').select('*').order('start_date');
+      const {data:vd}=await sb.schema('kanban').from('vacations').select('*').order('start_date');
       if(vd) vacations=vd.map(v=>({id:v.id,name:v.member_name,startDate:v.start_date,endDate:v.end_date,type:v.type||'연차',note:v.note||''}));
       renderAll();
     })
-    .on('postgres_changes',{event:'*',schema:'public',table:'notices'}, async()=>{
+    .on('postgres_changes',{event:'*',schema:'kanban',table:'notices'}, async()=>{
       if(syncLock) return;
-      const {data:nd}=await sb.from('notices').select('*').order('pinned',{ascending:false}).order('created_at',{ascending:false});
+      const {data:nd}=await sb.schema('kanban').from('notices').select('*').order('pinned',{ascending:false}).order('created_at',{ascending:false});
       if(nd) notices=nd.map(n=>({id:n.id,title:n.title,content:n.content||'',author:n.author||'',date:n.notice_date,pinned:n.pinned||false}));
       if(document.getElementById('overlay')?.classList.contains('show')) _renderNoticeModal();
     })
@@ -656,13 +656,13 @@ async function pushTask(t) {
   syncLock=true;
   try {
     const {checklist,...td}=t;
-    await sb.from('tasks').upsert({
+    await sb.schema('kanban').from('tasks').upsert({
       id:td.id,title:td.title,assignee:td.assignee,label:td.label,due:td.due,
       status:td.status,blocker:td.blocker,blocked_at:td.blockedAt,
       note:td.note,done_date:td.doneDate,updated_at:new Date().toISOString()
     });
     if(checklist&&checklist.length>0){
-      await sb.from('checklists').upsert(checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
+      await sb.schema('kanban').from('checklists').upsert(checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
     }
   } finally { setTimeout(()=>syncLock=false,800); }
 }
@@ -671,7 +671,7 @@ async function deleteTaskSB(id) {
   saveToLocal();
   if(!sb||sbStatus!=='connected') return;
   syncLock=true;
-  try { await sb.from('tasks').delete().eq('id',id); }
+  try { await sb.schema('kanban').from('tasks').delete().eq('id',id); }
   finally { setTimeout(()=>syncLock=false,800); }
 }
 
@@ -679,7 +679,7 @@ async function pushMember(m) {
   saveToLocal();
   if(!sb||sbStatus!=='connected') return;
   syncLock=true;
-  try { await sb.from('members').upsert({id:m.id,name:m.name,role:m.role,color:m.color,sort_order:MEMBERS.indexOf(m)}); }
+  try { await sb.schema('kanban').from('members').upsert({id:m.id,name:m.name,role:m.role,color:m.color,sort_order:MEMBERS.indexOf(m)}); }
   finally { setTimeout(()=>syncLock=false,800); }
 }
 
@@ -687,20 +687,20 @@ async function deleteMemberSB(id) {
   saveToLocal();
   if(!sb||sbStatus!=='connected') return;
   syncLock=true;
-  try { await sb.from('members').delete().eq('id',id); }
+  try { await sb.schema('kanban').from('members').delete().eq('id',id); }
   finally { setTimeout(()=>syncLock=false,800); }
 }
 
 async function loadFromSupabase() {
   if(!sb) return;
   await _pullSettings();
-  const {data:md}=await sb.from('members').select('*').order('sort_order');
-  const {data:td}=await sb.from('tasks').select('*').order('created_at');
-  const {data:cd}=await sb.from('checklists').select('*').order('sort_order');
+  const {data:md}=await sb.schema('kanban').from('members').select('*').order('sort_order');
+  const {data:td}=await sb.schema('kanban').from('tasks').select('*').order('created_at');
+  const {data:cd}=await sb.schema('kanban').from('checklists').select('*').order('sort_order');
   if(md&&md.length>0) MEMBERS=md;
-  const {data:vd}=await sb.from('vacations').select('*').order('start_date');
+  const {data:vd}=await sb.schema('kanban').from('vacations').select('*').order('start_date');
   if(vd) vacations=vd.map(v=>({id:v.id,name:v.member_name,startDate:v.start_date,endDate:v.end_date,type:v.type||'연차',note:v.note||''}));
-  const {data:nd}=await sb.from('notices').select('*').order('pinned',{ascending:false}).order('created_at',{ascending:false});
+  const {data:nd}=await sb.schema('kanban').from('notices').select('*').order('pinned',{ascending:false}).order('created_at',{ascending:false});
   if(nd) notices=nd.map(n=>({id:n.id,title:n.title,content:n.content||'',author:n.author||'',date:n.notice_date,pinned:n.pinned||false}));
   if(td) tasks=td.map(t=>({
     id:t.id,title:t.title,assignee:t.assignee||'',label:t.label||Object.keys(LABELS)[0],due:t.due||'',
@@ -716,13 +716,13 @@ async function pushAllToSupabase() {
   toast('Supabase에 동기화 중...');
   syncLock=true;
   try {
-    for(const m of MEMBERS) await sb.from('members').upsert({id:m.id,name:m.name,role:m.role,color:m.color,sort_order:MEMBERS.indexOf(m)});
+    for(const m of MEMBERS) await sb.schema('kanban').from('members').upsert({id:m.id,name:m.name,role:m.role,color:m.color,sort_order:MEMBERS.indexOf(m)});
     for(const t of tasks) {
-      await sb.from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
-      if(t.checklist.length>0) await sb.from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
+      await sb.schema('kanban').from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
+      if(t.checklist.length>0) await sb.schema('kanban').from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
     }
-    for(const v of vacations) await sb.from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});
-    for(const n of notices) await sb.from('notices').upsert({id:n.id,title:n.title,content:n.content,author:n.author,notice_date:n.date,pinned:n.pinned,updated_at:new Date().toISOString()});
+    for(const v of vacations) await sb.schema('kanban').from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});
+    for(const n of notices) await sb.schema('kanban').from('notices').upsert({id:n.id,title:n.title,content:n.content,author:n.author,notice_date:n.date,pinned:n.pinned,updated_at:new Date().toISOString()});
     await _pushSettings();
     toast('✅ Supabase 동기화 완료');
   } catch(e){ toast('동기화 오류: '+e.message,'err'); }
@@ -849,7 +849,7 @@ const DEFAULT_TASKS = () => JSON.parse(JSON.stringify([
 
 let vacations=[];
 let notices=[];
-const VAC_TYPES=['연차','반차(오전)','반차(오후)','반반차(오전)','반반차(오후)','병가','공가','기타'];
+const VAC_TYPES=['연차','반차(오전)','반차(오후)','병가','공가','기타'];
 const VAC_TYPE_COLOR={'연차':'#2563EB','반차(오전)':'#7C3AED','반차(오후)':'#9333EA','병가':'#DC2626','공가':'#D97706','기타':'#64748B'};
 let nextId=1;
 let nextClId=200;
@@ -968,7 +968,7 @@ function saveCardSettings(){
 async function _pushSettings(){
   if(!sb||sbStatus!=='connected') return;
   try{
-    await sb.from('settings').upsert([
+    await sb.schema('kanban').from('settings').upsert([
       {key:'labels', value:JSON.stringify(LABELS), updated_at:new Date().toISOString()},
       {key:'wip_max', value:String(WIP_MAX), updated_at:new Date().toISOString()},
       {key:'guide', value:JSON.stringify(GUIDE_CONTENT), updated_at:new Date().toISOString()},
@@ -980,7 +980,7 @@ async function _pushSettings(){
 async function _pushGuide(){
   if(!sb||sbStatus!=='connected') return;
   try{
-    await sb.from('settings').upsert([
+    await sb.schema('kanban').from('settings').upsert([
       {key:'guide', value:JSON.stringify(GUIDE_CONTENT), updated_at:new Date().toISOString()},
     ]);
   }catch(e){}
@@ -989,7 +989,7 @@ async function _pushGuide(){
 async function _pullSettings(){
   if(!sb||sbStatus!=='connected') return;
   try{
-    const {data}=await sb.from('settings').select('*');
+    const {data}=await sb.schema('kanban').from('settings').select('*');
     if(!data) return;
     let changed=false;
     for(const row of data){
@@ -1665,7 +1665,7 @@ async function saveEditMember(id){
   await pushMember(m);
   if(oldName!==newName&&sb&&sbStatus==='connected'){
     syncLock=true;
-    try{await sb.from('tasks').update({assignee:newName}).eq('assignee',oldName);}
+    try{await sb.schema('kanban').from('tasks').update({assignee:newName}).eq('assignee',oldName);}
     finally{setTimeout(()=>syncLock=false,800);}
   }
   renderAll();
@@ -1894,7 +1894,7 @@ async function testSupabaseConn(){
   toast('연결 테스트 중...');
   try{
     const client=window.supabase.createClient(url,key);
-    const{error}=await client.from('members').select('id').limit(1);
+    const{error}=await client.schema('kanban').from('members').select('id').limit(1);
     if(error){
       if(error.code==='42P01') toast('연결 성공! (테이블 미생성 - SQL 실행 필요)','warn');
       else throw error;
@@ -1942,11 +1942,11 @@ async function resetDemoData(){
   if(sb&&sbStatus==='connected'){
     syncLock=true;
     try{
-      await sb.from('checklists').delete().neq('id','__none__');
-      await sb.from('tasks').delete().neq('id','__none__');
+      await sb.schema('kanban').from('checklists').delete().neq('id','__none__');
+      await sb.schema('kanban').from('tasks').delete().neq('id','__none__');
       for(const t of tasks){
-        await sb.from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
-        if(t.checklist.length>0) await sb.from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
+        await sb.schema('kanban').from('tasks').upsert({id:t.id,title:t.title,assignee:t.assignee,label:t.label,due:t.due,status:t.status,blocker:t.blocker,blocked_at:t.blockedAt,note:t.note,done_date:t.doneDate});
+        if(t.checklist.length>0) await sb.schema('kanban').from('checklists').upsert(t.checklist.map((c,i)=>({id:c.id,task_id:t.id,text:c.text,done:c.done,sort_order:i})));
       }
     }finally{setTimeout(()=>syncLock=false,800);}
   }
@@ -1986,14 +1986,14 @@ async function pushVacation(v){
   saveToLocal();
   if(!sb||sbStatus!=='connected')return;
   syncLock=true;
-  try{await sb.from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});}
+  try{await sb.schema('kanban').from('vacations').upsert({id:v.id,member_name:v.name,start_date:v.startDate,end_date:v.endDate,type:v.type,note:v.note});}
   finally{setTimeout(()=>syncLock=false,800);}
 }
 async function deleteVacationSB(id){
   saveToLocal();
   if(!sb||sbStatus!=='connected')return;
   syncLock=true;
-  try{await sb.from('vacations').delete().eq('id',id);}
+  try{await sb.schema('kanban').from('vacations').delete().eq('id',id);}
   finally{setTimeout(()=>syncLock=false,800);}
 }
 
@@ -2002,14 +2002,14 @@ async function pushNotice(n){
   saveToLocal();
   if(!sb||sbStatus!=='connected')return;
   syncLock=true;
-  try{await sb.from('notices').upsert({id:n.id,title:n.title,content:n.content,author:n.author,notice_date:n.date,pinned:n.pinned,updated_at:new Date().toISOString()});}
+  try{await sb.schema('kanban').from('notices').upsert({id:n.id,title:n.title,content:n.content,author:n.author,notice_date:n.date,pinned:n.pinned,updated_at:new Date().toISOString()});}
   finally{setTimeout(()=>syncLock=false,800);}
 }
 async function deleteNoticeSB(id){
   saveToLocal();
   if(!sb||sbStatus!=='connected')return;
   syncLock=true;
-  try{await sb.from('notices').delete().eq('id',id);}
+  try{await sb.schema('kanban').from('notices').delete().eq('id',id);}
   finally{setTimeout(()=>syncLock=false,800);}
 }
 
@@ -2202,7 +2202,7 @@ function _renderVacPane(){
         <div class="fr" style="margin-bottom:8px"><label>시작일</label><input type="date" id="vac-start" value="${defStart}"></div>
         <div class="fr" style="margin-bottom:8px"><label>종료일</label><input type="date" id="vac-end" value="${defEnd}"></div>
       </div>
-      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="" value="${editing?.note||''}"></div>
+      <div class="fr" style="margin-bottom:8px"><label>메모 (선택)</label><input id="vac-note" placeholder="예: 개인 사유, 여행 등" value="${editing?.note||''}"></div>
       <div style="display:flex;justify-content:flex-end;gap:7px">
         ${isEdit?`<button class="btn btn-ghost" onclick="_vacEditId=null;_renderNoticeModal()">취소</button>`:''}
         <button class="btn btn-p" onclick="${isEdit?`saveVacationEdit('${_vacEditId}')`:'addVacation()'}">${isEdit?'저장':'등록'}</button>
